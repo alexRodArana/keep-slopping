@@ -1,6 +1,7 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <rect width="1024" height="1024" rx="190" fill="#000000"/>
 
+  <g transform="translate(-76 0)">
   <!-- K -->
   <path d="M282 300H356V724H282V300Z" fill="#FFFFFF"/>
   <path d="M357 512L546 300H640L455 508L652 724H552L357 512Z" fill="#FFFFFF"/>
@@ -25,4 +26,5 @@
            C617 547 562 512 562 435
            C562 363 626 314 720 314Z"
         fill="#FFFFFF"/>
+  </g>
 </svg>

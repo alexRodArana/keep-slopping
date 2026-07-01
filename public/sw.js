@@ -1,4 +1,4 @@
-const CACHE_NAME = 'keep-slopping-v2'
+const CACHE_NAME = 'keep-slopping-v3'
 const CORE_ASSETS = ['./', './manifest.webmanifest', './keep-slopping-icon.svg', './app-icon-192.png', './app-icon-512.png']
 
 self.addEventListener('install', (event) => {
