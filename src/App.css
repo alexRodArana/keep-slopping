@@ -333,6 +333,20 @@ html:not([data-theme='dark']) .brand-mark img {
   animation: rise 240ms ease both;
 }
 
+.today-hero-copy {
+  display: grid;
+  gap: 8px;
+  width: min(720px, 100%);
+  margin: 0 auto 2px;
+  text-align: center;
+}
+
+.today-hero-copy span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 820;
+}
+
 .hero-title-row,
 .meal-card-head,
 .focus-head,
@@ -361,6 +375,10 @@ html:not([data-theme='dark']) .brand-mark img {
 }
 
 .hero-phrase {
+  color: var(--ink);
+  font-size: clamp(26px, 8vw, 46px);
+  font-weight: 920;
+  line-height: 1.02;
   min-height: 2.04em;
   animation: phraseIn 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
@@ -1253,10 +1271,24 @@ button:not(:disabled):active {
     padding: 12px;
   }
 
+  .today-hero-copy {
+    width: min(100%, 350px);
+    margin-top: 4px;
+    margin-bottom: 0;
+  }
+
+  .today-hero-copy span {
+    font-size: 11px;
+  }
+
   .hero-panel h1,
   .focus-head h1,
   .plan-head h1 {
     font-size: clamp(28px, 9vw, 38px);
+  }
+
+  .hero-phrase {
+    font-size: clamp(30px, 9vw, 40px);
   }
 
   .hero-stats {

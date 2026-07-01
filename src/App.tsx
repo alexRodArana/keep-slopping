@@ -912,11 +912,14 @@ function TodayView({
 
   return (
     <section className="today-view enter">
-      <div className="hero-panel">
+      <div className="today-hero-copy">
         <span>Plan de hoy</span>
         <h1 className="hero-phrase" key={heroPhrase}>
           {heroPhrase}
         </h1>
+      </div>
+
+      <div className="hero-panel">
         <div className="hero-stats">
           <MetricCard icon={<Flame size={18} />} label="Objetivo" value={`${formatNumber(totalCalories)} kcal`} />
           <MetricCard icon={<CheckCircle2 size={18} />} label="Hechas" value={`${completedCount}/${meals.length}`} />
