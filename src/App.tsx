@@ -6,8 +6,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
+  Cloud,
   Clock3,
   Flame,
+  Mail,
   Moon,
   Palette,
   Pencil,
@@ -20,10 +22,32 @@ import {
   Utensils,
   X,
 } from 'lucide-react'
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from 'react'
-import { recommendations } from './data'
+import {
+  type CSSProperties,
+  type Dispatch,
+  type FormEvent,
+  type ReactNode,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { initialState, recommendations } from './data'
 import './App.css'
 import { loadState, saveState } from './storage'
+import {
+  getSession,
+  isSupabaseConfigured,
+  loadRemoteState,
+  onAuthChange,
+  saveRemoteState,
+  signInWithEmail,
+  signOut,
+  signUpWithEmail,
+  type SyncSession,
+} from './supabase'
 import type { AccentColor, ActiveMealSession, AppState, Ingredient, Meal, MealSession, TabKey, ThemeMode } from './types'
 
 type CalendarDay = {
@@ -55,6 +79,8 @@ const accentOptions: AccentOption[] = [
   { key: 'rose', label: 'Rosa', color: '#f472b6' },
 ]
 
+const defaultMealsSignature = JSON.stringify(initialState.meals)
+
 const createId = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -72,6 +98,8 @@ const addMonths = (monthKey: string, offset: number) => {
   const date = new Date(year, month - 1 + offset, 1)
   return toMonthKey(date)
 }
+
+const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
 
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat('es-MX', {
@@ -109,6 +137,9 @@ const vibrate = (duration = 8) => {
 const mealCalories = (meal: Meal) => meal.ingredients.reduce((total, ingredient) => total + ingredient.calories, 0)
 
 const plannedDayCalories = (meals: Meal[]) => meals.reduce((total, meal) => total + mealCalories(meal), 0)
+
+const hasUserData = (value: AppState) =>
+  Boolean(value.sessions.length || value.activeSession || JSON.stringify(value.meals) !== defaultMealsSignature)
 
 const getMeal = (meals: Meal[], mealId: string) => meals.find((meal) => meal.id === mealId)
 
@@ -182,7 +213,18 @@ const buildCalendarDays = (monthKey: string, daySummaries: Map<string, DaySummar
 }
 
 function App() {
-  const [state, setState] = useState<AppState>(() => loadState())
+  const [state, setState] = useState<AppState>(initialState)
+  const stateRef = useRef(state)
+  const authHydrationRef = useRef(0)
+  const initialAuthHandledRef = useRef(false)
+  const isHydratingRef = useRef(false)
+  const [isLoaded, setIsLoaded] = useState(false)
+  const [session, setSession] = useState<SyncSession | null>(null)
+  const [syncEmail, setSyncEmail] = useState('')
+  const [syncPassword, setSyncPassword] = useState('')
+  const [syncMessage, setSyncMessage] = useState('')
+  const [syncStatus, setSyncStatus] = useState<'local' | 'loading' | 'synced' | 'sent' | 'error'>('local')
+  const [syncCooldown, setSyncCooldown] = useState(0)
   const [activeTab, setActiveTab] = useState<TabKey>('today')
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const storedTheme = localStorage.getItem('keep-slopping-theme')
@@ -200,7 +242,169 @@ function App() {
   const currentAccent = accentOptions.find((option) => option.key === accent) ?? accentOptions[0]
   const totalCalories = useMemo(() => plannedDayCalories(state.meals), [state.meals])
 
-  useEffect(() => saveState(state), [state])
+  const applyLoadedState = useCallback((savedState: AppState) => {
+    stateRef.current = savedState
+    setState(savedState)
+  }, [])
+
+  const loadRemoteStateWithRetry = useCallback(async (userId: string) => {
+    try {
+      return await loadRemoteState(userId)
+    } catch (error) {
+      await wait(500)
+      try {
+        return await loadRemoteState(userId)
+      } catch {
+        throw error
+      }
+    }
+  }, [])
+
+  const hydrateSessionState = useCallback(
+    async (nextSession: SyncSession, localState: AppState) => {
+      const token = authHydrationRef.current + 1
+      authHydrationRef.current = token
+      isHydratingRef.current = true
+      setSyncStatus('loading')
+
+      try {
+        const remoteState = await loadRemoteStateWithRetry(nextSession.user.id)
+        if (authHydrationRef.current !== token) {
+          return
+        }
+
+        const shouldBootstrapRemote = !hasUserData(remoteState) && hasUserData(localState)
+        const nextState = shouldBootstrapRemote ? localState : remoteState
+
+        applyLoadedState(nextState)
+        setSession(nextSession)
+        setSyncStatus('synced')
+        setSyncMessage('')
+
+        try {
+          saveState(nextState)
+        } catch (error) {
+          console.error('Could not cache remote state locally', error)
+        }
+
+        if (shouldBootstrapRemote) {
+          await saveRemoteState(nextSession.user.id, nextState)
+        }
+      } finally {
+        if (authHydrationRef.current === token) {
+          isHydratingRef.current = false
+        }
+      }
+    },
+    [applyLoadedState, loadRemoteStateWithRetry],
+  )
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadInitialState = async () => {
+      try {
+        const localState = loadState()
+
+        if (isSupabaseConfigured) {
+          const currentSession = await getSession()
+          if (!mounted) {
+            return
+          }
+
+          if (currentSession) {
+            await hydrateSessionState(currentSession, localState)
+          } else {
+            setSession(null)
+            applyLoadedState(localState)
+            setSyncStatus('local')
+          }
+        } else {
+          applyLoadedState(localState)
+          setSyncStatus('local')
+        }
+      } catch (error) {
+        console.error('Could not load persisted state', error)
+        if (mounted) {
+          applyLoadedState(loadState())
+          setSyncStatus('error')
+          setSyncMessage('No se pudo cargar Supabase.')
+        }
+      } finally {
+        if (mounted) {
+          initialAuthHandledRef.current = true
+          setIsLoaded(true)
+        }
+      }
+    }
+
+    loadInitialState()
+
+    const unsubscribe = onAuthChange(async (nextSession) => {
+      if (!initialAuthHandledRef.current) {
+        return
+      }
+
+      if (!nextSession) {
+        authHydrationRef.current += 1
+        isHydratingRef.current = false
+        setSession(null)
+        setSyncStatus('local')
+        return
+      }
+
+      try {
+        const localState = stateRef.current
+        if (!mounted) {
+          return
+        }
+        await hydrateSessionState(nextSession, localState)
+        setSyncPassword('')
+      } catch (error) {
+        console.error('Could not load remote state', error)
+        setSession(nextSession)
+        setSyncStatus('error')
+        setSyncMessage('No se pudo sincronizar.')
+      }
+    })
+
+    return () => {
+      mounted = false
+      unsubscribe()
+    }
+  }, [applyLoadedState, hydrateSessionState])
+
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
+
+  useEffect(() => {
+    if (!isLoaded || isHydratingRef.current) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      const persist = async () => {
+        try {
+          saveState(state)
+          if (session) {
+            await saveRemoteState(session.user.id, state)
+            setSyncStatus('synced')
+          } else {
+            setSyncStatus('local')
+          }
+        } catch (error) {
+          console.error('Could not save state', error)
+          setSyncStatus('error')
+          setSyncMessage('No se pudo guardar.')
+        }
+      }
+
+      persist()
+    }, 220)
+
+    return () => window.clearTimeout(timeout)
+  }, [isLoaded, session, state])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -220,6 +424,67 @@ function App() {
     const interval = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(interval)
   }, [state.activeSession])
+
+  useEffect(() => {
+    if (syncCooldown <= 0) {
+      return
+    }
+
+    const interval = window.setInterval(() => setSyncCooldown((seconds) => Math.max(0, seconds - 1)), 1000)
+    return () => window.clearInterval(interval)
+  }, [syncCooldown])
+
+  const requestSyncLink = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!syncEmail.trim() || !syncPassword || syncCooldown > 0) {
+      return
+    }
+
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
+    const intent = submitter?.value === 'signup' ? 'signup' : 'signin'
+
+    try {
+      setSyncStatus('loading')
+      if (intent === 'signup') {
+        await signUpWithEmail(syncEmail.trim(), syncPassword)
+      } else {
+        await signInWithEmail(syncEmail.trim(), syncPassword)
+      }
+      setSyncStatus('sent')
+      setSyncMessage(intent === 'signup' ? 'Cuenta creada.' : '')
+    } catch (error) {
+      console.error('Could not authenticate with Supabase', error)
+      setSyncStatus('error')
+      const errorMessage = error instanceof Error ? error.message : 'No se pudo sincronizar.'
+
+      if (errorMessage.toLowerCase().includes('rate limit')) {
+        setSyncCooldown(60)
+        setSyncMessage('Espera 60 segundos antes de intentar otra vez.')
+        return
+      }
+
+      if (errorMessage.toLowerCase().includes('invalid login credentials')) {
+        setSyncMessage('Correo o contraseña incorrectos.')
+        return
+      }
+
+      if (errorMessage.toLowerCase().includes('already registered')) {
+        setSyncMessage('Ese correo ya tiene cuenta. Usa Entrar.')
+        return
+      }
+
+      setSyncMessage(errorMessage.replace('Signup', 'Registro'))
+    }
+  }
+
+  const disconnectSync = async () => {
+    authHydrationRef.current += 1
+    isHydratingRef.current = false
+    await signOut()
+    setSession(null)
+    setSyncStatus('local')
+    setSyncPassword('')
+  }
 
   const startMeal = (mealId: string) => {
     vibrate(10)
@@ -398,6 +663,20 @@ function App() {
         </button>
 
         <div className="header-actions">
+          {session && (
+            <button
+              aria-label="Cuenta registrada. Tocar para salir"
+              className={syncStatus === 'error' ? 'account-status error' : 'account-status'}
+              data-tooltip={syncStatus === 'error' ? 'Error de sync' : 'Registrado'}
+              type="button"
+              onClick={() => {
+                vibrate(10)
+                void disconnectSync()
+              }}
+            >
+              {syncStatus === 'error' ? <Cloud size={17} /> : <CheckCircle2 size={17} />}
+            </button>
+          )}
           <div className="accent-picker">
             <button
               aria-expanded={accentOpen}
@@ -465,8 +744,98 @@ function App() {
         </nav>
       )}
 
-      <main className={state.activeSession ? 'main main-focus' : `main main-${activeTab}`}>{content}</main>
+      <main className={state.activeSession ? 'main main-focus' : `main main-${activeTab}`}>
+        <SyncPanel
+          email={syncEmail}
+          isConfigured={isSupabaseConfigured}
+          message={syncMessage}
+          password={syncPassword}
+          session={session}
+          setEmail={setSyncEmail}
+          setPassword={setSyncPassword}
+          status={syncStatus}
+          submit={requestSyncLink}
+          syncCooldown={syncCooldown}
+        />
+        {isLoaded ? content : <LoadingView />}
+      </main>
     </div>
+  )
+}
+
+function SyncPanel({
+  email,
+  isConfigured,
+  message,
+  password,
+  session,
+  setEmail,
+  setPassword,
+  status,
+  submit,
+  syncCooldown,
+}: {
+  email: string
+  isConfigured: boolean
+  message: string
+  password: string
+  session: SyncSession | null
+  setEmail: Dispatch<SetStateAction<string>>
+  setPassword: Dispatch<SetStateAction<string>>
+  status: 'local' | 'loading' | 'synced' | 'sent' | 'error'
+  submit: (event: FormEvent<HTMLFormElement>) => void
+  syncCooldown: number
+}) {
+  if (!isConfigured) {
+    return (
+      <section className="sync-panel muted">
+        <Cloud size={17} />
+        <span>Supabase pendiente</span>
+      </section>
+    )
+  }
+
+  if (session) {
+    return null
+  }
+
+  return (
+    <form className="sync-panel login" onSubmit={submit}>
+      <Mail size={17} />
+      <input
+        aria-label="Email"
+        autoComplete="email"
+        placeholder="email"
+        type="email"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+      />
+      <input
+        aria-label="Contraseña"
+        autoComplete="current-password"
+        minLength={6}
+        placeholder="contraseña"
+        type="password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+      />
+      <button className="primary-button compact" disabled={status === 'loading' || syncCooldown > 0} type="submit" value="signin">
+        {syncCooldown > 0 ? `${syncCooldown}s` : 'Entrar'}
+      </button>
+      <button className="secondary-button compact" disabled={status === 'loading' || syncCooldown > 0} type="submit" value="signup">
+        Crear
+      </button>
+      {message && <small>{message}</small>}
+    </form>
+  )
+}
+
+function LoadingView() {
+  return (
+    <section className="loading-view surface">
+      <ChefHat size={18} />
+      <span>Cargando plan</span>
+    </section>
   )
 }
 

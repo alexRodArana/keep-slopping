@@ -160,6 +160,30 @@ html:not([data-theme='dark']) .brand-mark img {
   box-shadow: 0 0 0 3px var(--focus);
 }
 
+.account-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  min-height: 42px;
+  color: var(--ok);
+  background: var(--ok-soft);
+  border: 1px solid var(--ok-line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.account-status.error {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--line));
+}
+
 .tabs {
   display: inline-flex;
   align-items: center;
@@ -225,6 +249,55 @@ html:not([data-theme='dark']) .brand-mark img {
 
 .main-focus {
   width: min(760px, calc(100% - 36px));
+}
+
+.sync-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 44px;
+  margin: 0 auto 18px;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(14px);
+}
+
+.sync-panel.login {
+  display: grid;
+  grid-template-columns: 18px minmax(170px, 230px) minmax(140px, 190px) auto auto;
+}
+
+.sync-panel.login small {
+  grid-column: 2 / -1;
+  color: var(--muted);
+}
+
+.sync-panel.login input {
+  height: 36px;
+}
+
+.sync-panel.muted {
+  justify-content: center;
+}
+
+.loading-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 108px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 820;
+  animation: enter 220ms ease both;
 }
 
 .enter {
@@ -810,6 +883,14 @@ button:not(:disabled) {
   padding: 0 12px;
 }
 
+.primary-button.compact,
+.secondary-button.compact {
+  width: auto;
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
 .finish-button {
   width: 100%;
   padding: 0 16px;
@@ -856,7 +937,8 @@ button:not(:disabled) {
 .primary-button:hover,
 .finish-button:hover,
 .secondary-button:hover,
-.icon-button:hover {
+.icon-button:hover,
+.account-status:hover {
   transform: translateY(-1px);
 }
 
@@ -987,7 +1069,8 @@ button:not(:disabled):active {
     height: 17px;
   }
 
-  .header-actions .icon-button {
+  .header-actions .icon-button,
+  .account-status {
     justify-self: end;
     width: 40px;
     min-height: 40px;
@@ -1054,6 +1137,59 @@ button:not(:disabled):active {
   .main.main-focus {
     padding-top: 10px;
     padding-bottom: 18px;
+  }
+
+  .main.main-focus .sync-panel {
+    display: none;
+  }
+
+  .sync-panel {
+    width: 100%;
+    min-height: 40px;
+    margin-bottom: 12px;
+    padding: 7px 8px;
+    border-radius: 16px;
+  }
+
+  .sync-panel.login {
+    grid-template-columns: 18px minmax(0, 1fr) 72px;
+    gap: 8px;
+  }
+
+  .sync-panel.login input {
+    height: 38px;
+    font-size: 16px;
+  }
+
+  .sync-panel.login input:first-of-type {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .sync-panel.login input:last-of-type {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .sync-panel.login .primary-button.compact,
+  .sync-panel.login .secondary-button.compact {
+    min-height: 38px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  .sync-panel.login .primary-button.compact {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .sync-panel.login .secondary-button.compact {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  .sync-panel.login small {
+    grid-column: 2 / -1;
   }
 
   input {
