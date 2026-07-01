@@ -9,6 +9,7 @@ import {
   Clock3,
   Flame,
   Moon,
+  Palette,
   Pencil,
   Play,
   Plus,
@@ -33,6 +34,13 @@ type CalendarDay = {
   hasProgress: boolean
 }
 
+type DaySummary = {
+  completedMealIds: Set<string>
+  fulfilled: boolean
+  hasProgress: boolean
+  sessions: MealSession[]
+}
+
 type AccentOption = {
   key: AccentColor
   label: string
@@ -42,8 +50,9 @@ type AccentOption = {
 const accentOptions: AccentOption[] = [
   { key: 'green', label: 'Verde', color: '#39d98a' },
   { key: 'blue', label: 'Azul', color: '#7aa8ff' },
-  { key: 'violet', label: 'Violeta', color: '#b894ff' },
-  { key: 'amber', label: 'Ambar', color: '#ffbd59' },
+  { key: 'purple', label: 'Morado', color: '#a78bfa' },
+  { key: 'orange', label: 'Naranja', color: '#fbbf24' },
+  { key: 'rose', label: 'Rosa', color: '#f472b6' },
 ]
 
 const createId = (prefix: string) =>
@@ -113,23 +122,43 @@ const sessionCalories = (session: ActiveMealSession | MealSession, meal?: Meal) 
     .reduce((total, ingredient) => total + ingredient.calories, 0)
 }
 
-const sessionsForDate = (sessions: MealSession[], date: string) => sessions.filter((session) => session.date === date)
+const emptyDaySummary = (): DaySummary => ({
+  completedMealIds: new Set(),
+  fulfilled: false,
+  hasProgress: false,
+  sessions: [],
+})
 
-const completedMealIdsForDate = (sessions: MealSession[], date: string) =>
-  new Set(sessionsForDate(sessions, date).filter((session) => session.completed).map((session) => session.mealId))
+const buildDaySummaries = (meals: Meal[], sessions: MealSession[]) => {
+  const mealIds = new Set(meals.map((meal) => meal.id))
+  const summaries = new Map<string, DaySummary>()
 
-const isDayFulfilled = (meals: Meal[], sessions: MealSession[], date: string) => {
-  if (!meals.length) {
-    return false
-  }
+  sessions.forEach((session) => {
+    if (!mealIds.has(session.mealId)) {
+      return
+    }
 
-  const completedMealIds = completedMealIdsForDate(sessions, date)
-  return meals.every((meal) => completedMealIds.has(meal.id))
+    const summary = summaries.get(session.date) ?? emptyDaySummary()
+    summary.sessions.push(session)
+    summary.hasProgress = true
+
+    if (session.completed) {
+      summary.completedMealIds.add(session.mealId)
+    }
+
+    summaries.set(session.date, summary)
+  })
+
+  summaries.forEach((summary) => {
+    summary.fulfilled = meals.length > 0 && meals.every((meal) => summary.completedMealIds.has(meal.id))
+  })
+
+  return summaries
 }
 
-const hasDayProgress = (sessions: MealSession[], date: string) => sessions.some((session) => session.date === date)
+const getDaySummary = (summaries: Map<string, DaySummary>, date: string) => summaries.get(date) ?? emptyDaySummary()
 
-const buildCalendarDays = (monthKey: string, state: AppState): CalendarDay[] => {
+const buildCalendarDays = (monthKey: string, daySummaries: Map<string, DaySummary>): CalendarDay[] => {
   const [year, month] = monthKey.split('-').map(Number)
   const monthStart = new Date(year, month - 1, 1)
   const gridStart = new Date(monthStart)
@@ -140,13 +169,14 @@ const buildCalendarDays = (monthKey: string, state: AppState): CalendarDay[] => 
     const date = new Date(gridStart)
     date.setDate(gridStart.getDate() + index)
     const dateKey = toDateKey(date)
+    const summary = getDaySummary(daySummaries, dateKey)
 
     return {
       date: dateKey,
       dayNumber: date.getDate(),
       isCurrentMonth: toMonthKey(date) === monthKey,
-      isFulfilled: isDayFulfilled(state.meals, state.sessions, dateKey),
-      hasProgress: hasDayProgress(state.sessions, dateKey),
+      isFulfilled: summary.fulfilled,
+      hasProgress: summary.hasProgress,
     }
   })
 }
@@ -168,6 +198,7 @@ function App() {
   const today = todayIso()
   const activeMeal = state.activeSession ? getMeal(state.meals, state.activeSession.mealId) : undefined
   const currentAccent = accentOptions.find((option) => option.key === accent) ?? accentOptions[0]
+  const totalCalories = useMemo(() => plannedDayCalories(state.meals), [state.meals])
 
   useEffect(() => saveState(state), [state])
 
@@ -354,13 +385,15 @@ function App() {
   )
 
   return (
-    <div className={state.activeSession ? 'app-shell focus-mode' : 'app-shell'}>
+    <div className={state.activeSession ? 'app-shell meal-focus-mode' : 'app-shell'}>
       <header className="app-header">
         <button aria-label="Ir a hoy" className="brand" type="button" onClick={() => setActiveTab('today')}>
-          <img src="./keep-slopping-icon.svg" alt="" />
-          <span>
+          <span className="brand-mark">
+            <img src="./keep-slopping-icon.svg" alt="" />
+          </span>
+          <span className="brand-copy">
             <strong>Keep Slopping</strong>
-            <small>{state.activeSession ? 'Cocinando' : `${formatNumber(plannedDayCalories(state.meals))} kcal plan`}</small>
+            <small>{state.activeSession ? 'Cocinando' : `${formatNumber(totalCalories)} kcal plan`}</small>
           </span>
         </button>
 
@@ -369,22 +402,26 @@ function App() {
             <button
               aria-expanded={accentOpen}
               aria-label="Cambiar acento"
-              className="icon-button"
+              className="icon-button accent-button"
+              data-tooltip={currentAccent.label}
               type="button"
               onClick={() => {
                 vibrate(6)
                 setAccentOpen((open) => !open)
               }}
             >
+              <Palette size={17} />
               <span className="accent-dot" style={{ '--accent-dot': currentAccent.color } as CSSProperties} />
             </button>
             {accentOpen && (
-              <div className="accent-menu">
+              <div className="accent-menu" role="menu">
                 {accentOptions.map((option) => (
                   <button
-                    aria-label={option.label}
+                    aria-checked={option.key === accent}
+                    aria-label={`Color ${option.label}`}
                     className={option.key === accent ? 'accent-swatch active' : 'accent-swatch'}
                     key={option.key}
+                    role="menuitemradio"
                     style={{ '--accent-dot': option.color } as CSSProperties}
                     type="button"
                     onClick={() => {
@@ -403,6 +440,7 @@ function App() {
           <button
             aria-label="Cambiar tema"
             className="icon-button"
+            data-tooltip={theme === 'dark' ? 'Tema claro' : 'Tema oscuro'}
             type="button"
             onClick={() => {
               setTheme((current) => (current === 'dark' ? 'light' : 'dark'))
@@ -414,10 +452,8 @@ function App() {
         </div>
       </header>
 
-      <main>{content}</main>
-
       {!state.activeSession && (
-        <nav className="bottom-nav" aria-label="Navegacion principal">
+        <nav className="tabs" aria-label="Navegacion principal">
           <TabButton active={activeTab === 'today'} icon={<Utensils size={19} />} label="Hoy" onClick={() => setActiveTab('today')} />
           <TabButton
             active={activeTab === 'calendar'}
@@ -428,6 +464,8 @@ function App() {
           <TabButton active={activeTab === 'plan'} icon={<Settings2 size={19} />} label="Plan" onClick={() => setActiveTab('plan')} />
         </nav>
       )}
+
+      <main className={state.activeSession ? 'main main-focus' : `main main-${activeTab}`}>{content}</main>
     </div>
   )
 }
@@ -444,7 +482,14 @@ function TabButton({
   onClick: () => void
 }) {
   return (
-    <button className={active ? 'nav-item active' : 'nav-item'} type="button" onClick={onClick}>
+    <button
+      className={active ? 'tab active' : 'tab'}
+      type="button"
+      onClick={() => {
+        vibrate(6)
+        onClick()
+      }}
+    >
       {icon}
       <span>{label}</span>
     </button>
@@ -462,11 +507,12 @@ function TodayView({
   startMeal: (mealId: string) => void
   today: string
 }) {
-  const completedMealIds = completedMealIdsForDate(sessions, today)
-  const todaySessions = sessionsForDate(sessions, today)
-  const completedCalories = todaySessions.reduce((total, session) => total + sessionCalories(session, getMeal(meals, session.mealId)), 0)
-  const totalCalories = plannedDayCalories(meals)
-  const progress = meals.length ? Math.round((completedMealIds.size / meals.length) * 100) : 0
+  const daySummaries = useMemo(() => buildDaySummaries(meals, sessions), [meals, sessions])
+  const todaySummary = getDaySummary(daySummaries, today)
+  const completedCalories = todaySummary.sessions.reduce((total, session) => total + sessionCalories(session, getMeal(meals, session.mealId)), 0)
+  const totalCalories = useMemo(() => plannedDayCalories(meals), [meals])
+  const completedCount = todaySummary.completedMealIds.size
+  const progress = meals.length ? Math.round((completedCount / meals.length) * 100) : 0
 
   return (
     <section className="today-view enter">
@@ -475,7 +521,7 @@ function TodayView({
         <h1>Come exacto. Cocina simple.</h1>
         <div className="hero-stats">
           <MetricCard icon={<Flame size={18} />} label="Objetivo" value={`${formatNumber(totalCalories)} kcal`} />
-          <MetricCard icon={<CheckCircle2 size={18} />} label="Hechas" value={`${completedMealIds.size}/${meals.length}`} />
+          <MetricCard icon={<CheckCircle2 size={18} />} label="Hechas" value={`${completedCount}/${meals.length}`} />
           <MetricCard icon={<ChefHat size={18} />} label="Registrado" value={`${formatNumber(completedCalories)} kcal`} />
         </div>
         <div className="day-progress">
@@ -485,7 +531,7 @@ function TodayView({
 
       <div className="meal-list">
         {meals.map((meal) => {
-          const complete = completedMealIds.has(meal.id)
+          const complete = todaySummary.completedMealIds.has(meal.id)
           return <MealCard complete={complete} key={meal.id} meal={meal} startMeal={startMeal} />
         })}
       </div>
@@ -627,10 +673,9 @@ function CalendarView({ state }: { state: AppState }) {
   const latestSessionDate = state.sessions[0]?.date ?? todayIso()
   const [visibleMonth, setVisibleMonth] = useState(latestSessionDate.slice(0, 7))
   const [selectedDate, setSelectedDate] = useState(latestSessionDate)
-  const calendarDays = useMemo(() => buildCalendarDays(visibleMonth, state), [state, visibleMonth])
-  const selectedSessions = sessionsForDate(state.sessions, selectedDate)
-  const completedMealIds = completedMealIdsForDate(state.sessions, selectedDate)
-  const fulfilled = isDayFulfilled(state.meals, state.sessions, selectedDate)
+  const daySummaries = useMemo(() => buildDaySummaries(state.meals, state.sessions), [state.meals, state.sessions])
+  const calendarDays = useMemo(() => buildCalendarDays(visibleMonth, daySummaries), [daySummaries, visibleMonth])
+  const selectedSummary = getDaySummary(daySummaries, selectedDate)
 
   const changeMonth = (offset: number) => {
     vibrate(6)
@@ -692,14 +737,14 @@ function CalendarView({ state }: { state: AppState }) {
         <div className="selected-day-head">
           <div>
             <span>{formatDate(selectedDate)}</span>
-            <strong>{fulfilled ? 'Plan cumplido' : `${completedMealIds.size}/${state.meals.length} comidas`}</strong>
+            <strong>{selectedSummary.fulfilled ? 'Plan cumplido' : `${selectedSummary.completedMealIds.size}/${state.meals.length} comidas`}</strong>
           </div>
-          {fulfilled ? <CheckCircle2 size={22} /> : <CalendarDays size={22} />}
+          {selectedSummary.fulfilled ? <CheckCircle2 size={22} /> : <CalendarDays size={22} />}
         </div>
 
         <div className="day-meals">
           {state.meals.map((meal) => {
-            const session = selectedSessions.find((item) => item.mealId === meal.id)
+            const session = selectedSummary.sessions.find((item) => item.mealId === meal.id)
             return (
               <article className={session?.completed ? 'day-meal done' : 'day-meal'} key={meal.id}>
                 <div>

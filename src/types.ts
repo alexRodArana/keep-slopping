@@ -2,7 +2,7 @@ export type TabKey = 'today' | 'calendar' | 'plan'
 
 export type ThemeMode = 'dark' | 'light'
 
-export type AccentColor = 'green' | 'blue' | 'violet' | 'amber'
+export type AccentColor = 'green' | 'blue' | 'purple' | 'orange' | 'rose'
 
 export type Ingredient = {
   id: string
