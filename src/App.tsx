@@ -79,6 +79,17 @@ const accentOptions: AccentOption[] = [
   { key: 'rose', label: 'Rosa', color: '#f472b6' },
 ]
 
+const foodPhrases = [
+  'Goy mode off. Meal prep Kosher.',
+  'Plan Judio: pesar, cocinar, cumplir.',
+  'Slopping Kosher, calorias bajo control.',
+  'Del antojo Goy al plato medido.',
+  'Cocina Kosher. Progreso limpio.',
+  'Que el Goy interior respete el plan.',
+  'Hoy toca precision Kosher en la cocina.',
+  'Comida medida, disciplina Judia.',
+]
+
 const defaultMealsSignature = JSON.stringify(initialState.meals)
 
 const createId = (prefix: string) =>
@@ -235,11 +246,13 @@ function App() {
     return accentOptions.some((option) => option.key === storedAccent) ? (storedAccent as AccentColor) : 'green'
   })
   const [accentOpen, setAccentOpen] = useState(false)
+  const [foodPhraseIndex, setFoodPhraseIndex] = useState(() => Math.floor(Math.random() * foodPhrases.length))
   const [now, setNow] = useState(() => Date.now())
 
   const today = todayIso()
   const activeMeal = state.activeSession ? getMeal(state.meals, state.activeSession.mealId) : undefined
   const currentAccent = accentOptions.find((option) => option.key === accent) ?? accentOptions[0]
+  const currentFoodPhrase = foodPhrases[foodPhraseIndex]
   const totalCalories = useMemo(() => plannedDayCalories(state.meals), [state.meals])
 
   const applyLoadedState = useCallback((savedState: AppState) => {
@@ -433,6 +446,18 @@ function App() {
     const interval = window.setInterval(() => setSyncCooldown((seconds) => Math.max(0, seconds - 1)), 1000)
     return () => window.clearInterval(interval)
   }, [syncCooldown])
+
+  useEffect(() => {
+    if (state.activeSession) {
+      return
+    }
+
+    const interval = window.setInterval(() => {
+      setFoodPhraseIndex((index) => (index + 1) % foodPhrases.length)
+    }, 5200)
+
+    return () => window.clearInterval(interval)
+  }, [state.activeSession])
 
   const requestSyncLink = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -634,7 +659,7 @@ function App() {
       onToggleIngredient={toggleIngredient}
     />
   ) : activeTab === 'today' ? (
-    <TodayView meals={state.meals} sessions={state.sessions} startMeal={startMeal} today={today} />
+    <TodayView heroPhrase={currentFoodPhrase} meals={state.meals} sessions={state.sessions} startMeal={startMeal} today={today} />
   ) : activeTab === 'calendar' ? (
     <CalendarView state={state} />
   ) : (
@@ -866,11 +891,13 @@ function TabButton({
 }
 
 function TodayView({
+  heroPhrase,
   meals,
   sessions,
   startMeal,
   today,
 }: {
+  heroPhrase: string
   meals: Meal[]
   sessions: MealSession[]
   startMeal: (mealId: string) => void
@@ -887,7 +914,9 @@ function TodayView({
     <section className="today-view enter">
       <div className="hero-panel">
         <span>Plan de hoy</span>
-        <h1>Come exacto. Cocina simple.</h1>
+        <h1 className="hero-phrase" key={heroPhrase}>
+          {heroPhrase}
+        </h1>
         <div className="hero-stats">
           <MetricCard icon={<Flame size={18} />} label="Objetivo" value={`${formatNumber(totalCalories)} kcal`} />
           <MetricCard icon={<CheckCircle2 size={18} />} label="Hechas" value={`${completedCount}/${meals.length}`} />
