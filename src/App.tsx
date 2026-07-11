@@ -240,12 +240,15 @@ const getDaySummary = (summaries: Map<string, DaySummary>, date: string) => summ
 
 const buildCalendarDays = (monthKey: string, daySummaries: Map<string, DaySummary>): CalendarDay[] => {
   const [year, month] = monthKey.split('-').map(Number)
+  const firstDay = new Date(year, month - 1, 1)
+  const startOffset = (firstDay.getDay() + 6) % 7
   const daysInMonth = new Date(year, month, 0).getDate()
+  const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7
 
-  return Array.from({ length: 35 }, (_, index) => {
-    const dayNumber = index + 1
+  return Array.from({ length: totalCells }, (_, index) => {
+    const dayNumber = index - startOffset + 1
 
-    if (dayNumber > daysInMonth) {
+    if (dayNumber < 1 || dayNumber > daysInMonth) {
       return {
         date: `${monthKey}-empty-${index}`,
         dayNumber: null,
@@ -1174,6 +1177,12 @@ function CalendarView({ state }: { state: AppState }) {
           <button aria-label="Mes siguiente" className="icon-button flat" type="button" onClick={() => changeMonth(1)}>
             <ChevronRight size={18} />
           </button>
+        </div>
+
+        <div className="calendar-weekdays" aria-hidden="true">
+          {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((day, index) => (
+            <span key={`${day}-${index}`}>{day}</span>
+          ))}
         </div>
 
         <div className="calendar-grid">
