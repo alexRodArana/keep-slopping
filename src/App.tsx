@@ -52,7 +52,7 @@ import type { AccentColor, ActiveMealSession, AppState, Ingredient, Meal, MealSe
 
 type CalendarDay = {
   date: string
-  dayNumber: number
+  dayNumber: number | null
   isCurrentMonth: boolean
   isFulfilled: boolean
   hasProgress: boolean
@@ -240,21 +240,28 @@ const getDaySummary = (summaries: Map<string, DaySummary>, date: string) => summ
 
 const buildCalendarDays = (monthKey: string, daySummaries: Map<string, DaySummary>): CalendarDay[] => {
   const [year, month] = monthKey.split('-').map(Number)
-  const monthStart = new Date(year, month - 1, 1)
-  const gridStart = new Date(monthStart)
-  const mondayOffset = (monthStart.getDay() + 6) % 7
-  gridStart.setDate(monthStart.getDate() - mondayOffset)
+  const daysInMonth = new Date(year, month, 0).getDate()
 
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(gridStart)
-    date.setDate(gridStart.getDate() + index)
-    const dateKey = toDateKey(date)
+  return Array.from({ length: 35 }, (_, index) => {
+    const dayNumber = index + 1
+
+    if (dayNumber > daysInMonth) {
+      return {
+        date: `${monthKey}-empty-${index}`,
+        dayNumber: null,
+        isCurrentMonth: false,
+        isFulfilled: false,
+        hasProgress: false,
+      }
+    }
+
+    const dateKey = `${monthKey}-${String(dayNumber).padStart(2, '0')}`
     const summary = getDaySummary(daySummaries, dateKey)
 
     return {
       date: dateKey,
-      dayNumber: date.getDate(),
-      isCurrentMonth: toMonthKey(date) === monthKey,
+      dayNumber,
+      isCurrentMonth: true,
       isFulfilled: summary.fulfilled,
       hasProgress: summary.hasProgress,
     }
@@ -1169,36 +1176,36 @@ function CalendarView({ state }: { state: AppState }) {
           </button>
         </div>
 
-        <div className="calendar-weekdays" aria-hidden="true">
-          {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((day, index) => (
-            <span key={`${day}-${index}`}>{day}</span>
-          ))}
-        </div>
-
         <div className="calendar-grid">
           {calendarDays.map((day) => {
+            const isEmpty = day.dayNumber === null
             const className = [
               'calendar-day',
+              isEmpty ? 'empty' : '',
               day.isCurrentMonth ? '' : 'muted',
               day.hasProgress ? 'partial' : '',
               day.isFulfilled ? 'fulfilled' : '',
-              day.date === selectedDate ? 'selected' : '',
+              !isEmpty && day.date === selectedDate ? 'selected' : '',
             ]
               .filter(Boolean)
               .join(' ')
 
             return (
               <button
-                aria-label={`${formatDate(day.date)}${day.isFulfilled ? ', plan cumplido' : ', pendiente'}`}
+                aria-label={isEmpty ? 'Dia vacio' : `${formatDate(day.date)}${day.isFulfilled ? ', plan cumplido' : ', pendiente'}`}
                 className={className}
+                disabled={isEmpty}
                 key={day.date}
                 type="button"
                 onClick={() => {
+                  if (isEmpty) {
+                    return
+                  }
                   vibrate(day.hasProgress ? 8 : 4)
                   setSelectedDate(day.date)
                 }}
               >
-                {day.dayNumber}
+                {day.dayNumber ?? ''}
               </button>
             )
           })}
