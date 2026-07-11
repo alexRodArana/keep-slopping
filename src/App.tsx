@@ -72,11 +72,11 @@ type AccentOption = {
 }
 
 const accentOptions: AccentOption[] = [
-  { key: 'green', label: 'Verde', color: '#39d98a' },
-  { key: 'blue', label: 'Azul', color: '#7aa8ff' },
-  { key: 'purple', label: 'Morado', color: '#a78bfa' },
-  { key: 'orange', label: 'Naranja', color: '#fbbf24' },
-  { key: 'rose', label: 'Rosa', color: '#f472b6' },
+  { key: 'green', label: 'Verde', color: '#39b980' },
+  { key: 'blue', label: 'Azul', color: '#2563eb' },
+  { key: 'purple', label: 'Morado', color: '#7c3aed' },
+  { key: 'orange', label: 'Naranja', color: '#d97706' },
+  { key: 'rose', label: 'Rosa', color: '#be185d' },
 ]
 
 const foodPhrases = [
@@ -111,6 +111,10 @@ const addMonths = (monthKey: string, offset: number) => {
 }
 
 const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
+
+const updateMetaContent = (selector: string, content: string) => {
+  document.querySelector(selector)?.setAttribute('content', content)
+}
 
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat('es-MX', {
@@ -154,6 +158,26 @@ const hasUserData = (value: AppState) =>
 
 const getMeal = (meals: Meal[], mealId: string) => meals.find((meal) => meal.id === mealId)
 
+const getSessionKey = (session: Pick<MealSession, 'date' | 'mealId'>) => `${session.date}::${session.mealId}`
+
+const getSessionTime = (session: Pick<MealSession, 'startedAt'> & { endedAt?: string }) => {
+  const endedAt = session.endedAt ? new Date(session.endedAt).getTime() : Number.NaN
+  const startedAt = new Date(session.startedAt).getTime()
+
+  return Number.isNaN(endedAt) ? (Number.isNaN(startedAt) ? 0 : startedAt) : endedAt
+}
+
+const sortSessionsByRecency = (sessions: MealSession[]) =>
+  [...sessions].sort((a, b) => getSessionTime(b) - getSessionTime(a) || b.date.localeCompare(a.date))
+
+const getLatestMealSession = (sessions: MealSession[], mealId: string, date: string) =>
+  sortSessionsByRecency(sessions.filter((session) => session.mealId === mealId && session.date === date))[0]
+
+const upsertMealSession = (sessions: MealSession[], nextSession: MealSession) => {
+  const nextKey = getSessionKey(nextSession)
+  return sortSessionsByRecency([nextSession, ...sessions.filter((session) => getSessionKey(session) !== nextKey)])
+}
+
 const sessionCalories = (session: ActiveMealSession | MealSession, meal?: Meal) => {
   if (!meal) {
     return 0
@@ -164,6 +188,9 @@ const sessionCalories = (session: ActiveMealSession | MealSession, meal?: Meal) 
     .reduce((total, ingredient) => total + ingredient.calories, 0)
 }
 
+const isMealSessionComplete = (session: ActiveMealSession | MealSession, meal: Meal) =>
+  meal.ingredients.length > 0 && meal.ingredients.every((ingredient) => session.checkedIngredientIds.includes(ingredient.id))
+
 const emptyDaySummary = (): DaySummary => ({
   completedMealIds: new Set(),
   fulfilled: false,
@@ -172,19 +199,30 @@ const emptyDaySummary = (): DaySummary => ({
 })
 
 const buildDaySummaries = (meals: Meal[], sessions: MealSession[]) => {
-  const mealIds = new Set(meals.map((meal) => meal.id))
+  const mealsById = new Map(meals.map((meal) => [meal.id, meal]))
   const summaries = new Map<string, DaySummary>()
 
+  const latestSessions = new Map<string, MealSession>()
+
   sessions.forEach((session) => {
-    if (!mealIds.has(session.mealId)) {
+    if (!mealsById.has(session.mealId)) {
       return
     }
 
+    const key = getSessionKey(session)
+    const current = latestSessions.get(key)
+    if (!current || getSessionTime(session) >= getSessionTime(current)) {
+      latestSessions.set(key, session)
+    }
+  })
+
+  latestSessions.forEach((session) => {
     const summary = summaries.get(session.date) ?? emptyDaySummary()
     summary.sessions.push(session)
     summary.hasProgress = true
 
-    if (session.completed) {
+    const meal = mealsById.get(session.mealId)
+    if (meal && isMealSessionComplete(session, meal)) {
       summary.completedMealIds.add(session.mealId)
     }
 
@@ -422,6 +460,8 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('keep-slopping-theme', theme)
+    updateMetaContent('meta[name="theme-color"]', theme === 'dark' ? '#101417' : '#f5f7fb')
+    updateMetaContent('meta[name="apple-mobile-web-app-status-bar-style"]', theme === 'dark' ? 'black-translucent' : 'default')
   }, [theme])
 
   useEffect(() => {
@@ -513,16 +553,21 @@ function App() {
 
   const startMeal = (mealId: string) => {
     vibrate(10)
-    setState((current) => ({
-      ...current,
-      activeSession: {
-        id: createId('meal-session'),
-        mealId,
-        date: todayIso(),
-        startedAt: new Date().toISOString(),
-        checkedIngredientIds: [],
-      },
-    }))
+    setState((current) => {
+      const date = todayIso()
+      const previousSession = getLatestMealSession(current.sessions, mealId, date)
+
+      return {
+        ...current,
+        activeSession: {
+          id: previousSession?.id ?? createId('meal-session'),
+          mealId,
+          date,
+          startedAt: new Date().toISOString(),
+          checkedIngredientIds: previousSession?.checkedIngredientIds ?? [],
+        },
+      }
+    })
     setActiveTab('today')
   }
 
@@ -558,18 +603,32 @@ function App() {
     }
 
     vibrate(18)
-    const completed = activeMeal.ingredients.every((ingredient) => state.activeSession?.checkedIngredientIds.includes(ingredient.id))
-    const session: MealSession = {
-      ...state.activeSession,
-      endedAt: new Date().toISOString(),
-      completed,
-    }
+    setState((current) => {
+      if (!current.activeSession) {
+        return current
+      }
 
-    setState((current) => ({
-      ...current,
-      activeSession: undefined,
-      sessions: [session, ...current.sessions],
-    }))
+      const meal = getMeal(current.meals, current.activeSession.mealId)
+      if (!meal) {
+        return {
+          ...current,
+          activeSession: undefined,
+        }
+      }
+
+      const completed = isMealSessionComplete(current.activeSession, meal)
+      const session: MealSession = {
+        ...current.activeSession,
+        endedAt: new Date().toISOString(),
+        completed,
+      }
+
+      return {
+        ...current,
+        activeSession: undefined,
+        sessions: upsertMealSession(current.sessions, session),
+      }
+    })
   }
 
   const updateMeal = (mealId: string, patch: Partial<Meal>) => {
@@ -641,10 +700,22 @@ function App() {
     vibrate(10)
     setState((current) => ({
       ...current,
+      activeSession:
+        current.activeSession?.mealId === mealId
+          ? {
+              ...current.activeSession,
+              checkedIngredientIds: current.activeSession.checkedIngredientIds.filter((id) => id !== ingredientId),
+            }
+          : current.activeSession,
       meals: current.meals.map((meal) =>
         meal.id === mealId && meal.ingredients.length > 1
           ? { ...meal, ingredients: meal.ingredients.filter((ingredient) => ingredient.id !== ingredientId) }
           : meal,
+      ),
+      sessions: current.sessions.map((session) =>
+        session.mealId === mealId
+          ? { ...session, checkedIngredientIds: session.checkedIngredientIds.filter((id) => id !== ingredientId) }
+          : session,
       ),
     }))
   }
@@ -1013,7 +1084,7 @@ function MealFocus({
   const totalCount = meal.ingredients.length
   const progress = totalCount ? Math.round((completedCount / totalCount) * 100) : 0
   const calories = sessionCalories(activeSession, meal)
-  const complete = totalCount > 0 && completedCount === totalCount
+  const complete = isMealSessionComplete(activeSession, meal)
 
   return (
     <section className="meal-focus enter">
@@ -1146,8 +1217,9 @@ function CalendarView({ state }: { state: AppState }) {
         <div className="day-meals">
           {state.meals.map((meal) => {
             const session = selectedSummary.sessions.find((item) => item.mealId === meal.id)
+            const complete = session ? isMealSessionComplete(session, meal) : false
             return (
-              <article className={session?.completed ? 'day-meal done' : 'day-meal'} key={meal.id}>
+              <article className={complete ? 'day-meal done' : 'day-meal'} key={meal.id}>
                 <div>
                   <strong>{meal.name}</strong>
                   <span>{session ? `${session.checkedIngredientIds.length}/${meal.ingredients.length} ingredientes` : 'Sin registro'}</span>

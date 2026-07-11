@@ -81,19 +81,68 @@ const normalizeSessions = (value: unknown): MealSession[] => {
   }))
 }
 
+const getSessionTime = (session: Pick<MealSession, 'startedAt' | 'endedAt'>) => {
+  const endedAt = new Date(session.endedAt).getTime()
+  const startedAt = new Date(session.startedAt).getTime()
+
+  return Number.isNaN(endedAt) ? (Number.isNaN(startedAt) ? 0 : startedAt) : endedAt
+}
+
+const normalizeMealSessions = (sessions: MealSession[], meals: Meal[]) => {
+  const ingredientIdsByMeal = new Map(meals.map((meal) => [meal.id, new Set(meal.ingredients.map((ingredient) => ingredient.id))]))
+  const latestSessions = new Map<string, MealSession>()
+
+  sessions.forEach((session) => {
+    const ingredientIds = ingredientIdsByMeal.get(session.mealId)
+    if (!ingredientIds) {
+      return
+    }
+
+    const cleanedSession = {
+      ...session,
+      checkedIngredientIds: session.checkedIngredientIds.filter((id) => ingredientIds.has(id)),
+    }
+    const key = `${cleanedSession.date}::${cleanedSession.mealId}`
+    const current = latestSessions.get(key)
+
+    if (!current || getSessionTime(cleanedSession) >= getSessionTime(current)) {
+      latestSessions.set(key, cleanedSession)
+    }
+  })
+
+  return [...latestSessions.values()].sort((a, b) => getSessionTime(b) - getSessionTime(a) || b.date.localeCompare(a.date))
+}
+
+const normalizeActiveMealSession = (activeSession: ActiveMealSession | undefined, meals: Meal[]) => {
+  if (!activeSession) {
+    return undefined
+  }
+
+  const meal = meals.find((item) => item.id === activeSession.mealId)
+  if (!meal) {
+    return undefined
+  }
+
+  const ingredientIds = new Set(meal.ingredients.map((ingredient) => ingredient.id))
+
+  return {
+    ...activeSession,
+    checkedIngredientIds: activeSession.checkedIngredientIds.filter((id) => ingredientIds.has(id)),
+  }
+}
+
 export const normalizeState = (value: unknown): AppState => {
   if (!isRecord(value)) {
     return initialState
   }
 
   const meals = normalizeMeals(value.meals)
-  const mealIds = new Set(meals.map((meal) => meal.id))
   const activeSession = normalizeActiveSession(value.activeSession)
 
   return {
     meals,
-    sessions: normalizeSessions(value.sessions).filter((session) => mealIds.has(session.mealId)),
-    activeSession: activeSession && mealIds.has(activeSession.mealId) ? activeSession : undefined,
+    sessions: normalizeMealSessions(normalizeSessions(value.sessions), meals),
+    activeSession: normalizeActiveMealSession(activeSession, meals),
   }
 }
 
