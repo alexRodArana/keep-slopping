@@ -55,6 +55,7 @@ export const recommendations = [
 ]
 
 export const initialState: AppState = {
+  creatineDates: [],
   meals: defaultMeals,
   sessions: [],
 }

@@ -51,6 +51,9 @@ const normalizeMeals = (value: unknown): Meal[] => {
 
 const normalizeCheckedIds = (value: unknown) => (Array.isArray(value) ? value.map(String).filter(Boolean) : [])
 
+const normalizeDateList = (value: unknown) =>
+  Array.isArray(value) ? [...new Set(value.map(String).filter(Boolean))].sort((a, b) => b.localeCompare(a)) : []
+
 const normalizeActiveSession = (value: unknown): ActiveMealSession | undefined => {
   if (!isRecord(value)) {
     return undefined
@@ -140,6 +143,7 @@ export const normalizeState = (value: unknown): AppState => {
   const activeSession = normalizeActiveSession(value.activeSession)
 
   return {
+    creatineDates: normalizeDateList(value.creatineDates),
     meals,
     sessions: normalizeMealSessions(normalizeSessions(value.sessions), meals),
     activeSession: normalizeActiveMealSession(activeSession, meals),

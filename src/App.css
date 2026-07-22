@@ -1,10 +1,7 @@
 .app-shell {
   min-height: 100svh;
   color: var(--ink);
-  background:
-    radial-gradient(circle at 12% 0%, var(--wash-a), transparent 34rem),
-    radial-gradient(circle at 86% 8%, var(--wash-b), transparent 32rem),
-    var(--bg);
+  background: var(--bg);
 }
 
 .app-header {
@@ -81,6 +78,7 @@ html:not([data-theme='dark']) .brand-mark img {
 .metric-card span,
 .meal-card-head span,
 .check-row small,
+.creatine-card small,
 .field-stack span,
 .selected-day span,
 .plan-note,
@@ -166,9 +164,9 @@ html:not([data-theme='dark']) .brand-mark img {
   justify-content: center;
   width: 42px;
   min-height: 42px;
-  color: var(--brand-ink);
-  background: var(--brand-soft);
-  border: 1px solid var(--brand-line);
+  color: var(--on-brand);
+  background: var(--brand);
+  border: 1px solid transparent;
   border-radius: 8px;
   cursor: pointer;
   transition:
@@ -230,8 +228,8 @@ html:not([data-theme='dark']) .brand-mark img {
 }
 
 .tab.active {
-  color: var(--ink);
-  background: var(--surface);
+  color: var(--on-brand);
+  background: var(--brand);
   box-shadow: var(--shadow-soft);
 }
 
@@ -431,12 +429,7 @@ html:not([data-theme='dark']) .brand-mark img {
 .day-progress span {
   display: block;
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--brand) 58%, var(--surface)),
-    var(--brand),
-    color-mix(in srgb, var(--brand) 72%, var(--ink))
-  );
+  background: var(--brand);
   border-radius: inherit;
   transition: width 240ms ease;
 }
@@ -458,8 +451,21 @@ html:not([data-theme='dark']) .brand-mark img {
 }
 
 .meal-card.complete {
-  background: var(--brand-soft);
-  border-color: var(--brand-line);
+  color: var(--on-brand);
+  background: var(--brand);
+  border-color: transparent;
+}
+
+.meal-card.complete h2,
+.meal-card.complete strong,
+.meal-card.complete .meal-card-head span {
+  color: var(--on-brand);
+}
+
+.meal-card.complete .ingredient-preview span {
+  color: var(--on-brand);
+  background: color-mix(in srgb, var(--on-brand) 14%, transparent);
+  border-color: color-mix(in srgb, var(--on-brand) 24%, transparent);
 }
 
 .meal-card-head {
@@ -478,7 +484,8 @@ html:not([data-theme='dark']) .brand-mark img {
 .plan-card-footer strong,
 .day-meal small,
 .focus-progress strong,
-.check-row em {
+.check-row em,
+.creatine-card em {
   color: var(--brand-ink);
   font-weight: 900;
   font-variant-numeric: tabular-nums;
@@ -557,11 +564,11 @@ html:not([data-theme='dark']) .brand-mark img {
   gap: 6px;
   min-height: 36px;
   padding: 0 10px;
-  color: var(--brand-ink);
+  color: var(--on-brand);
   font-size: 12px;
   font-weight: 850;
-  background: var(--brand-soft);
-  border: 1px solid var(--brand-line);
+  background: var(--brand);
+  border: 1px solid transparent;
   border-radius: 8px;
 }
 
@@ -576,7 +583,8 @@ html:not([data-theme='dark']) .brand-mark img {
   justify-content: space-between;
 }
 
-.check-row {
+.check-row,
+.creatine-card {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
@@ -596,13 +604,16 @@ html:not([data-theme='dark']) .brand-mark img {
     transform 160ms ease;
 }
 
-.check-row:hover {
+.check-row:hover,
+.creatine-card:hover {
   transform: translateY(-1px);
 }
 
-.check-row.checked {
-  background: var(--brand-soft);
-  border-color: var(--brand-line);
+.check-row.checked,
+.creatine-card.complete {
+  color: var(--on-brand);
+  background: var(--brand);
+  border-color: transparent;
 }
 
 .check-icon {
@@ -617,21 +628,33 @@ html:not([data-theme='dark']) .brand-mark img {
   border-radius: 8px;
 }
 
-.check-row.checked .check-icon {
-  color: var(--brand);
-  border-color: var(--brand-line);
+.check-row.checked .check-icon,
+.creatine-card.complete .check-icon {
+  color: var(--on-brand);
+  border-color: color-mix(in srgb, var(--on-brand) 34%, transparent);
 }
 
-.check-row strong {
+.check-row strong,
+.creatine-card strong {
   display: block;
   color: var(--ink);
   font-size: 14px;
   font-weight: 850;
 }
 
-.check-row em {
+.check-row em,
+.creatine-card em {
   font-size: 12px;
   font-style: normal;
+}
+
+.check-row.checked strong,
+.check-row.checked small,
+.check-row.checked em,
+.creatine-card.complete strong,
+.creatine-card.complete small,
+.creatine-card.complete em {
+  color: var(--on-brand);
 }
 
 .finish-button {
@@ -723,21 +746,22 @@ html:not([data-theme='dark']) .brand-mark img {
 }
 
 .calendar-day.partial {
-  color: var(--brand-ink);
-  background: var(--brand-soft);
-  border-color: var(--brand-line);
+  color: var(--on-brand);
+  background: var(--brand);
+  border-color: transparent;
 }
 
 .calendar-day.fulfilled {
-  color: var(--brand-ink);
-  background: var(--brand-soft);
-  border-color: var(--brand-line);
+  color: var(--on-brand);
+  background: var(--brand);
+  border-color: transparent;
 }
 
 .calendar-day.selected {
-  color: var(--ink);
-  border-color: var(--brand);
-  box-shadow: 0 0 0 3px var(--focus);
+  color: var(--on-brand);
+  background: var(--brand);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .selected-day-head {
@@ -757,7 +781,7 @@ html:not([data-theme='dark']) .brand-mark img {
 }
 
 .selected-day svg {
-  color: var(--brand-ink);
+  color: var(--brand);
 }
 
 .day-meal {
@@ -772,8 +796,15 @@ html:not([data-theme='dark']) .brand-mark img {
 }
 
 .day-meal.done {
-  background: var(--brand-soft);
-  border-color: var(--brand-line);
+  color: var(--on-brand);
+  background: var(--brand);
+  border-color: transparent;
+}
+
+.day-meal.done strong,
+.day-meal.done span,
+.day-meal.done small {
+  color: var(--on-brand);
 }
 
 .day-meal > div {
@@ -908,7 +939,7 @@ button:not(:disabled) {
 
 .primary-button {
   width: 100%;
-  color: #ffffff;
+  color: var(--on-brand);
   background: var(--brand);
   border: 1px solid var(--brand);
 }
@@ -943,7 +974,7 @@ button:not(:disabled) {
 }
 
 .finish-button.complete {
-  color: #ffffff;
+  color: var(--on-brand);
   background: var(--brand);
   border-color: var(--brand);
 }
@@ -967,7 +998,7 @@ button:not(:disabled) {
 }
 
 .icon-button.brand-button {
-  color: #ffffff;
+  color: var(--on-brand);
   background: var(--brand);
   border-color: var(--brand);
 }
@@ -1275,10 +1306,11 @@ button:not(:disabled):active {
   .focus-head,
   .focus-progress,
   .check-row,
+  .creatine-card,
   .day-meal,
   .ingredient-editor,
   .metric-card {
-    border-radius: 16px;
+    border-radius: 10px;
   }
 
   .hero-panel,
@@ -1324,7 +1356,8 @@ button:not(:disabled):active {
     top: 70px;
   }
 
-  .check-row {
+  .check-row,
+  .creatine-card {
     grid-template-columns: 36px minmax(0, 1fr) auto;
     min-height: 64px;
     padding: 9px;
@@ -1332,11 +1365,21 @@ button:not(:disabled):active {
 
   .calendar-day {
     min-height: 42px;
-    border-radius: 12px;
+    border-radius: 10px;
   }
 
   .ingredient-editor {
     grid-template-columns: minmax(0, 1fr) 74px 40px;
     padding: 8px;
+  }
+}
+
+@media (max-width: 620px) {
+  .primary-button,
+  .secondary-button,
+  .finish-button,
+  .icon-button,
+  input {
+    border-radius: 8px;
   }
 }

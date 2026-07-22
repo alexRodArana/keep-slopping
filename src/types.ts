@@ -32,6 +32,7 @@ export type MealSession = ActiveMealSession & {
 }
 
 export type AppState = {
+  creatineDates: string[]
   meals: Meal[]
   sessions: MealSession[]
   activeSession?: ActiveMealSession

@@ -60,6 +60,7 @@ type CalendarDay = {
 
 type DaySummary = {
   completedMealIds: Set<string>
+  creatineCompleted: boolean
   fulfilled: boolean
   hasProgress: boolean
   sessions: MealSession[]
@@ -154,7 +155,7 @@ const mealCalories = (meal: Meal) => meal.ingredients.reduce((total, ingredient)
 const plannedDayCalories = (meals: Meal[]) => meals.reduce((total, meal) => total + mealCalories(meal), 0)
 
 const hasUserData = (value: AppState) =>
-  Boolean(value.sessions.length || value.activeSession || JSON.stringify(value.meals) !== defaultMealsSignature)
+  Boolean(value.creatineDates.length || value.sessions.length || value.activeSession || JSON.stringify(value.meals) !== defaultMealsSignature)
 
 const getMeal = (meals: Meal[], mealId: string) => meals.find((meal) => meal.id === mealId)
 
@@ -193,12 +194,13 @@ const isMealSessionComplete = (session: ActiveMealSession | MealSession, meal: M
 
 const emptyDaySummary = (): DaySummary => ({
   completedMealIds: new Set(),
+  creatineCompleted: false,
   fulfilled: false,
   hasProgress: false,
   sessions: [],
 })
 
-const buildDaySummaries = (meals: Meal[], sessions: MealSession[]) => {
+const buildDaySummaries = (meals: Meal[], sessions: MealSession[], creatineDates: string[]) => {
   const mealsById = new Map(meals.map((meal) => [meal.id, meal]))
   const summaries = new Map<string, DaySummary>()
 
@@ -229,8 +231,15 @@ const buildDaySummaries = (meals: Meal[], sessions: MealSession[]) => {
     summaries.set(session.date, summary)
   })
 
+  creatineDates.forEach((date) => {
+    const summary = summaries.get(date) ?? emptyDaySummary()
+    summary.creatineCompleted = true
+    summary.hasProgress = true
+    summaries.set(date, summary)
+  })
+
   summaries.forEach((summary) => {
-    summary.fulfilled = meals.length > 0 && meals.every((meal) => summary.completedMealIds.has(meal.id))
+    summary.fulfilled = meals.length > 0 && summary.creatineCompleted && meals.every((meal) => summary.completedMealIds.has(meal.id))
   })
 
   return summaries
@@ -730,6 +739,19 @@ function App() {
     }))
   }
 
+  const toggleCreatine = () => {
+    const date = todayIso()
+    vibrate(10)
+    setState((current) => {
+      const completed = current.creatineDates.includes(date)
+
+      return {
+        ...current,
+        creatineDates: completed ? current.creatineDates.filter((item) => item !== date) : [date, ...current.creatineDates],
+      }
+    })
+  }
+
   const content = state.activeSession && activeMeal ? (
     <MealFocus
       activeSession={state.activeSession}
@@ -740,7 +762,15 @@ function App() {
       onToggleIngredient={toggleIngredient}
     />
   ) : activeTab === 'today' ? (
-    <TodayView heroPhrase={currentFoodPhrase} meals={state.meals} sessions={state.sessions} startMeal={startMeal} today={today} />
+    <TodayView
+      creatineCompleted={state.creatineDates.includes(today)}
+      heroPhrase={currentFoodPhrase}
+      meals={state.meals}
+      sessions={state.sessions}
+      startMeal={startMeal}
+      today={today}
+      toggleCreatine={toggleCreatine}
+    />
   ) : activeTab === 'calendar' ? (
     <CalendarView state={state} />
   ) : (
@@ -972,24 +1002,33 @@ function TabButton({
 }
 
 function TodayView({
+  creatineCompleted,
   heroPhrase,
   meals,
   sessions,
   startMeal,
   today,
+  toggleCreatine,
 }: {
+  creatineCompleted: boolean
   heroPhrase: string
   meals: Meal[]
   sessions: MealSession[]
   startMeal: (mealId: string) => void
   today: string
+  toggleCreatine: () => void
 }) {
-  const daySummaries = useMemo(() => buildDaySummaries(meals, sessions), [meals, sessions])
+  const daySummaries = useMemo(
+    () => buildDaySummaries(meals, sessions, creatineCompleted ? [today] : []),
+    [creatineCompleted, meals, sessions, today],
+  )
   const todaySummary = getDaySummary(daySummaries, today)
   const completedCalories = todaySummary.sessions.reduce((total, session) => total + sessionCalories(session, getMeal(meals, session.mealId)), 0)
   const totalCalories = useMemo(() => plannedDayCalories(meals), [meals])
   const completedCount = todaySummary.completedMealIds.size
-  const progress = meals.length ? Math.round((completedCount / meals.length) * 100) : 0
+  const totalTasks = meals.length + 1
+  const completedTasks = completedCount + (creatineCompleted ? 1 : 0)
+  const progress = totalTasks ? Math.round((completedTasks / totalTasks) * 100) : 0
 
   return (
     <section className="today-view enter">
@@ -1003,13 +1042,22 @@ function TodayView({
       <div className="hero-panel">
         <div className="hero-stats">
           <MetricCard icon={<Flame size={18} />} label="Objetivo" value={`${formatNumber(totalCalories)} kcal`} />
-          <MetricCard icon={<CheckCircle2 size={18} />} label="Hechas" value={`${completedCount}/${meals.length}`} />
+          <MetricCard icon={<CheckCircle2 size={18} />} label="Hechas" value={`${completedTasks}/${totalTasks}`} />
           <MetricCard icon={<ChefHat size={18} />} label="Registrado" value={`${formatNumber(completedCalories)} kcal`} />
         </div>
         <div className="day-progress">
           <span style={{ width: `${progress}%` }} />
         </div>
       </div>
+
+      <button className={creatineCompleted ? 'creatine-card complete' : 'creatine-card'} type="button" onClick={toggleCreatine}>
+        <span className="check-icon">{creatineCompleted ? <Check size={18} /> : <Circle size={18} />}</span>
+        <span>
+          <strong>Creatina</strong>
+          <small>Tomar hoy</small>
+        </span>
+        <em>{creatineCompleted ? 'Hecho' : 'Pendiente'}</em>
+      </button>
 
       <div className="meal-list">
         {meals.map((meal) => {
@@ -1155,7 +1203,10 @@ function CalendarView({ state }: { state: AppState }) {
   const latestSessionDate = state.sessions[0]?.date ?? todayIso()
   const [visibleMonth, setVisibleMonth] = useState(latestSessionDate.slice(0, 7))
   const [selectedDate, setSelectedDate] = useState(latestSessionDate)
-  const daySummaries = useMemo(() => buildDaySummaries(state.meals, state.sessions), [state.meals, state.sessions])
+  const daySummaries = useMemo(
+    () => buildDaySummaries(state.meals, state.sessions, state.creatineDates),
+    [state.creatineDates, state.meals, state.sessions],
+  )
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth, daySummaries), [daySummaries, visibleMonth])
   const selectedSummary = getDaySummary(daySummaries, selectedDate)
 
@@ -1231,6 +1282,14 @@ function CalendarView({ state }: { state: AppState }) {
         </div>
 
         <div className="day-meals">
+          <article className={selectedSummary.creatineCompleted ? 'day-meal done' : 'day-meal'}>
+            <div>
+              <strong>Creatina</strong>
+              <span>Tomar hoy</span>
+            </div>
+            <small>{selectedSummary.creatineCompleted ? 'Hecho' : 'Pendiente'}</small>
+          </article>
+
           {state.meals.map((meal) => {
             const session = selectedSummary.sessions.find((item) => item.mealId === meal.id)
             const complete = session ? isMealSessionComplete(session, meal) : false
