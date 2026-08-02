@@ -1,21 +1,26 @@
 import {
+  ArrowLeft,
   CalendarDays,
   Check,
   CheckCircle2,
   ChefHat,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Circle,
   Cloud,
   Clock3,
   Flame,
+  LoaderCircle,
   Mail,
   Moon,
   Palette,
-  Pencil,
   Play,
   Plus,
   Save,
+  ScanBarcode,
+  Search,
   Settings2,
   Sun,
   Trash2,
@@ -34,8 +39,9 @@ import {
   useRef,
   useState,
 } from 'react'
-import { initialState, recommendations } from './data'
+import { initialState } from './data'
 import './App.css'
+import { calculateNutrition, getFoodByBarcode, normalizeBarcode, searchFoods } from './foodApi'
 import { loadState, saveState } from './storage'
 import {
   getSession,
@@ -48,7 +54,18 @@ import {
   signUpWithEmail,
   type SyncSession,
 } from './supabase'
-import type { AccentColor, ActiveMealSession, AppState, Ingredient, Meal, MealSession, TabKey, ThemeMode } from './types'
+import type {
+  AccentColor,
+  ActiveMealSession,
+  AppState,
+  FoodLog,
+  FoodProduct,
+  Ingredient,
+  Meal,
+  MealSession,
+  TabKey,
+  ThemeMode,
+} from './types'
 
 type CalendarDay = {
   date: string
@@ -61,9 +78,21 @@ type CalendarDay = {
 type DaySummary = {
   completedMealIds: Set<string>
   creatineCompleted: boolean
+  foodLogs: FoodLog[]
   fulfilled: boolean
   hasProgress: boolean
   sessions: MealSession[]
+}
+
+type FoodFinderMode = 'search' | 'scan'
+
+type FoodFinderRequest = {
+  target: 'log' | 'meal'
+  initialMode: FoodFinderMode
+  mealId?: string
+  editingLogId?: string
+  initialProduct?: FoodProduct
+  initialGrams?: number
 }
 
 type AccentOption = {
@@ -155,7 +184,13 @@ const mealCalories = (meal: Meal) => meal.ingredients.reduce((total, ingredient)
 const plannedDayCalories = (meals: Meal[]) => meals.reduce((total, meal) => total + mealCalories(meal), 0)
 
 const hasUserData = (value: AppState) =>
-  Boolean(value.creatineDates.length || value.sessions.length || value.activeSession || JSON.stringify(value.meals) !== defaultMealsSignature)
+  Boolean(
+    value.creatineDates.length ||
+      value.foodLogs.length ||
+      value.sessions.length ||
+      value.activeSession ||
+      JSON.stringify(value.meals) !== defaultMealsSignature,
+  )
 
 const getMeal = (meals: Meal[], mealId: string) => meals.find((meal) => meal.id === mealId)
 
@@ -189,18 +224,31 @@ const sessionCalories = (session: ActiveMealSession | MealSession, meal?: Meal) 
     .reduce((total, ingredient) => total + ingredient.calories, 0)
 }
 
+const foodLogToProduct = (log: FoodLog): FoodProduct => ({
+  barcode: log.barcode,
+  name: log.name,
+  brand: log.brand,
+  imageUrl: log.imageUrl,
+  servingGrams: log.servingGrams,
+  caloriesPer100g: log.caloriesPer100g,
+  proteinPer100g: log.proteinPer100g,
+  carbsPer100g: log.carbsPer100g,
+  fatPer100g: log.fatPer100g,
+})
+
 const isMealSessionComplete = (session: ActiveMealSession | MealSession, meal: Meal) =>
   meal.ingredients.length > 0 && meal.ingredients.every((ingredient) => session.checkedIngredientIds.includes(ingredient.id))
 
 const emptyDaySummary = (): DaySummary => ({
   completedMealIds: new Set(),
   creatineCompleted: false,
+  foodLogs: [],
   fulfilled: false,
   hasProgress: false,
   sessions: [],
 })
 
-const buildDaySummaries = (meals: Meal[], sessions: MealSession[], creatineDates: string[]) => {
+const buildDaySummaries = (meals: Meal[], sessions: MealSession[], creatineDates: string[], foodLogs: FoodLog[]) => {
   const mealsById = new Map(meals.map((meal) => [meal.id, meal]))
   const summaries = new Map<string, DaySummary>()
 
@@ -236,6 +284,13 @@ const buildDaySummaries = (meals: Meal[], sessions: MealSession[], creatineDates
     summary.creatineCompleted = true
     summary.hasProgress = true
     summaries.set(date, summary)
+  })
+
+  foodLogs.forEach((foodLog) => {
+    const summary = summaries.get(foodLog.date) ?? emptyDaySummary()
+    summary.foodLogs.push(foodLog)
+    summary.hasProgress = true
+    summaries.set(foodLog.date, summary)
   })
 
   summaries.forEach((summary) => {
@@ -304,6 +359,7 @@ function App() {
   })
   const [accentOpen, setAccentOpen] = useState(false)
   const [foodPhraseIndex, setFoodPhraseIndex] = useState(() => Math.floor(Math.random() * foodPhrases.length))
+  const [foodFinderRequest, setFoodFinderRequest] = useState<FoodFinderRequest | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
   const today = todayIso()
@@ -479,7 +535,7 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('keep-slopping-theme', theme)
-    updateMetaContent('meta[name="theme-color"]', theme === 'dark' ? '#101417' : '#f5f7fb')
+    updateMetaContent('meta[name="theme-color"]', theme === 'dark' ? '#0d0f12' : '#f5f6f8')
     updateMetaContent('meta[name="apple-mobile-web-app-status-bar-style"]', theme === 'dark' ? 'black-translucent' : 'default')
   }, [theme])
 
@@ -507,7 +563,7 @@ function App() {
   }, [syncCooldown])
 
   useEffect(() => {
-    if (state.activeSession) {
+    if (state.activeSession || foodFinderRequest) {
       return
     }
 
@@ -516,7 +572,7 @@ function App() {
     }, 5200)
 
     return () => window.clearInterval(interval)
-  }, [state.activeSession])
+  }, [foodFinderRequest, state.activeSession])
 
   const requestSyncLink = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -675,12 +731,13 @@ function App() {
 
   const addMeal = () => {
     vibrate(10)
+    const mealId = createId('meal')
     setState((current) => ({
       ...current,
       meals: [
         ...current.meals,
         {
-          id: createId('meal'),
+          id: mealId,
           name: 'Nueva comida',
           slot: '',
           ingredients: [{ id: createId('ingredient'), name: 'Ingrediente', amount: '', calories: 0 }],
@@ -688,6 +745,7 @@ function App() {
       ],
     }))
     setActiveTab('plan')
+    return mealId
   }
 
   const deleteMeal = (mealId: string) => {
@@ -752,7 +810,101 @@ function App() {
     })
   }
 
-  const content = state.activeSession && activeMeal ? (
+  const openFoodFinder = (request: FoodFinderRequest) => {
+    vibrate(8)
+    setAccentOpen(false)
+    setFoodFinderRequest(request)
+  }
+
+  const editFoodLog = (foodLog: FoodLog) => {
+    openFoodFinder({
+      target: 'log',
+      initialMode: 'search',
+      editingLogId: foodLog.id,
+      initialProduct: foodLogToProduct(foodLog),
+      initialGrams: foodLog.grams,
+    })
+  }
+
+  const deleteFoodLog = (foodLogId: string) => {
+    vibrate(12)
+    setState((current) => ({
+      ...current,
+      foodLogs: current.foodLogs.filter((foodLog) => foodLog.id !== foodLogId),
+    }))
+  }
+
+  const saveFoodSelection = (product: FoodProduct, grams: number) => {
+    if (!foodFinderRequest) {
+      return
+    }
+
+    const nutrition = calculateNutrition(product, grams)
+    const request = foodFinderRequest
+
+    setState((current) => {
+      if (request.target === 'meal' && request.mealId) {
+        const ingredient: Ingredient = {
+          id: createId('ingredient'),
+          name: product.brand ? `${product.name} · ${product.brand}` : product.name,
+          amount: `${formatNumber(grams)} g`,
+          calories: nutrition.calories,
+          barcode: product.barcode,
+          imageUrl: product.imageUrl,
+          grams,
+          caloriesPer100g: product.caloriesPer100g,
+          proteinPer100g: product.proteinPer100g,
+          carbsPer100g: product.carbsPer100g,
+          fatPer100g: product.fatPer100g,
+        }
+
+        return {
+          ...current,
+          meals: current.meals.map((meal) =>
+            meal.id === request.mealId
+              ? {
+                  ...meal,
+                  ingredients:
+                    meal.ingredients.length === 1 &&
+                    meal.ingredients[0].name === 'Ingrediente' &&
+                    meal.ingredients[0].calories === 0
+                      ? [ingredient]
+                      : [...meal.ingredients, ingredient],
+                }
+              : meal,
+          ),
+        }
+      }
+
+      const existingLog = request.editingLogId
+        ? current.foodLogs.find((foodLog) => foodLog.id === request.editingLogId)
+        : undefined
+      const nextLog: FoodLog = {
+        ...product,
+        id: existingLog?.id ?? createId('food-log'),
+        date: existingLog?.date ?? todayIso(),
+        grams,
+        ...nutrition,
+        createdAt: existingLog?.createdAt ?? new Date().toISOString(),
+      }
+
+      return {
+        ...current,
+        foodLogs: [nextLog, ...current.foodLogs.filter((foodLog) => foodLog.id !== nextLog.id)],
+      }
+    })
+
+    vibrate(16)
+    setFoodFinderRequest(null)
+  }
+
+  const content = foodFinderRequest ? (
+    <FoodFinder
+      request={foodFinderRequest}
+      onClose={() => setFoodFinderRequest(null)}
+      onSave={saveFoodSelection}
+    />
+  ) : state.activeSession && activeMeal ? (
     <MealFocus
       activeSession={state.activeSession}
       elapsedSeconds={Math.floor((now - new Date(state.activeSession.startedAt).getTime()) / 1000)}
@@ -764,8 +916,12 @@ function App() {
   ) : activeTab === 'today' ? (
     <TodayView
       creatineCompleted={state.creatineDates.includes(today)}
+      foodLogs={state.foodLogs.filter((foodLog) => foodLog.date === today)}
       heroPhrase={currentFoodPhrase}
       meals={state.meals}
+      onDeleteFoodLog={deleteFoodLog}
+      onEditFoodLog={editFoodLog}
+      openFoodFinder={openFoodFinder}
       sessions={state.sessions}
       startMeal={startMeal}
       today={today}
@@ -780,13 +936,16 @@ function App() {
       deleteIngredient={deleteIngredient}
       deleteMeal={deleteMeal}
       meals={state.meals}
+      openFoodFinder={openFoodFinder}
       updateIngredient={updateIngredient}
       updateMeal={updateMeal}
     />
   )
 
+  const isFocusMode = Boolean(state.activeSession || foodFinderRequest)
+
   return (
-    <div className={state.activeSession ? 'app-shell meal-focus-mode' : 'app-shell'}>
+    <div className={isFocusMode ? 'app-shell focus-mode' : 'app-shell'}>
       <header className="app-header">
         <button aria-label="Ir a hoy" className="brand" type="button" onClick={() => setActiveTab('today')}>
           <span className="brand-mark">
@@ -794,7 +953,7 @@ function App() {
           </span>
           <span className="brand-copy">
             <strong>Keep Slopping</strong>
-            <small>{state.activeSession ? 'Cocinando' : `${formatNumber(totalCalories)} kcal plan`}</small>
+            <small>{isFocusMode ? 'En progreso' : `${formatNumber(totalCalories)} kcal plan`}</small>
           </span>
         </button>
 
@@ -867,7 +1026,7 @@ function App() {
         </div>
       </header>
 
-      {!state.activeSession && (
+      {!isFocusMode && (
         <nav className="tabs" aria-label="Navegacion principal">
           <TabButton active={activeTab === 'today'} icon={<Utensils size={19} />} label="Hoy" onClick={() => setActiveTab('today')} />
           <TabButton
@@ -880,19 +1039,21 @@ function App() {
         </nav>
       )}
 
-      <main className={state.activeSession ? 'main main-focus' : `main main-${activeTab}`}>
-        <SyncPanel
-          email={syncEmail}
-          isConfigured={isSupabaseConfigured}
-          message={syncMessage}
-          password={syncPassword}
-          session={session}
-          setEmail={setSyncEmail}
-          setPassword={setSyncPassword}
-          status={syncStatus}
-          submit={requestSyncLink}
-          syncCooldown={syncCooldown}
-        />
+      <main className={isFocusMode ? 'main main-focus' : `main main-${activeTab}`}>
+        {!isFocusMode && (
+          <SyncPanel
+            email={syncEmail}
+            isConfigured={isSupabaseConfigured}
+            message={syncMessage}
+            password={syncPassword}
+            session={session}
+            setEmail={setSyncEmail}
+            setPassword={setSyncPassword}
+            status={syncStatus}
+            submit={requestSyncLink}
+            syncCooldown={syncCooldown}
+          />
+        )}
         {isLoaded ? content : <LoadingView />}
       </main>
     </div>
@@ -1001,29 +1162,456 @@ function TabButton({
   )
 }
 
+function FoodFinder({
+  onClose,
+  onSave,
+  request,
+}: {
+  onClose: () => void
+  onSave: (product: FoodProduct, grams: number) => void
+  request: FoodFinderRequest
+}) {
+  const [mode, setMode] = useState<FoodFinderMode>(request.initialMode)
+  const [query, setQuery] = useState('')
+  const [manualBarcode, setManualBarcode] = useState('')
+  const [results, setResults] = useState<FoodProduct[]>([])
+  const [selectedProduct, setSelectedProduct] = useState<FoodProduct | null>(request.initialProduct ?? null)
+  const [grams, setGrams] = useState(request.initialGrams ?? request.initialProduct?.servingGrams ?? 100)
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [message, setMessage] = useState('')
+  const [hasSearched, setHasSearched] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const scanHandledRef = useRef(false)
+
+  const selectProduct = useCallback((product: FoodProduct) => {
+    setSelectedProduct(product)
+    setGrams(product.servingGrams)
+    setStatus('idle')
+    setMessage('')
+  }, [])
+
+  const lookupBarcode = useCallback(
+    async (rawBarcode: string) => {
+      const barcode = normalizeBarcode(rawBarcode)
+      if (barcode.length < 6) {
+        setStatus('error')
+        setMessage('Ingresa un codigo de barras valido.')
+        return
+      }
+
+      abortRef.current?.abort()
+      const controller = new AbortController()
+      abortRef.current = controller
+      setStatus('loading')
+      setMessage('Buscando producto...')
+
+      try {
+        const product = await getFoodByBarcode(barcode, controller.signal)
+        if (!product) {
+          setStatus('error')
+          setMessage('Ese producto no tiene informacion nutricional disponible.')
+          scanHandledRef.current = false
+          return
+        }
+
+        vibrate(14)
+        selectProduct(product)
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return
+        }
+        setStatus('error')
+        setMessage(error instanceof Error ? error.message : 'No se pudo buscar el producto.')
+        scanHandledRef.current = false
+      }
+    },
+    [selectProduct],
+  )
+
+  useEffect(() => {
+    if (mode !== 'scan' || selectedProduct) {
+      return
+    }
+
+    let cancelled = false
+    let stopScanner: (() => void) | undefined
+    scanHandledRef.current = false
+
+    const startScanner = async () => {
+      if (!videoRef.current) {
+        return
+      }
+
+      try {
+        setStatus('loading')
+        setMessage('Iniciando camara...')
+        const { BrowserMultiFormatReader } = await import('@zxing/browser')
+        const codeReader = new BrowserMultiFormatReader()
+        const controls = await codeReader.decodeFromConstraints(
+          {
+            audio: false,
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+          },
+          videoRef.current,
+          (result, _error, scannerControls) => {
+            if (!result || scanHandledRef.current) {
+              return
+            }
+
+            scanHandledRef.current = true
+            scannerControls.stop()
+            void lookupBarcode(result.getText())
+          },
+        )
+
+        if (cancelled) {
+          controls.stop()
+          return
+        }
+
+        stopScanner = () => controls.stop()
+        setStatus('idle')
+        setMessage('Centra el codigo dentro del marco.')
+      } catch (error) {
+        if (cancelled) {
+          return
+        }
+
+        console.error('Could not start barcode scanner', error)
+        setStatus('error')
+        setMessage('No se pudo abrir la camara. Revisa el permiso o escribe el codigo.')
+      }
+    }
+
+    void startScanner()
+
+    return () => {
+      cancelled = true
+      stopScanner?.()
+    }
+  }, [lookupBarcode, mode, selectedProduct])
+
+  useEffect(
+    () => () => {
+      abortRef.current?.abort()
+    },
+    [],
+  )
+
+  const submitSearch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (query.trim().length < 2) {
+      setStatus('error')
+      setMessage('Escribe al menos dos caracteres.')
+      return
+    }
+
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    setStatus('loading')
+    setMessage('')
+    setHasSearched(true)
+
+    try {
+      const nextResults = await searchFoods(query, controller.signal)
+      setResults(nextResults)
+      setStatus('idle')
+      setMessage(nextResults.length ? '' : 'No encontramos alimentos con calorias disponibles.')
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return
+      }
+      setStatus('error')
+      setMessage(error instanceof Error ? error.message : 'No se pudo buscar.')
+    }
+  }
+
+  if (selectedProduct) {
+    const nutrition = calculateNutrition(selectedProduct, grams)
+    const saveLabel =
+      request.target === 'meal' ? 'Agregar al plan' : request.editingLogId ? 'Guardar cambios' : 'Registrar alimento'
+
+    return (
+      <section className="food-finder enter">
+        <div className="finder-head">
+          <button
+            aria-label="Volver"
+            className="icon-button flat"
+            type="button"
+            onClick={() => {
+              if (request.initialProduct) {
+                onClose()
+                return
+              }
+              setSelectedProduct(null)
+              scanHandledRef.current = false
+            }}
+          >
+            <ArrowLeft size={19} />
+          </button>
+          <div>
+            <span>Porcion</span>
+            <h1>Ajustar alimento</h1>
+          </div>
+          <button aria-label="Cerrar" className="icon-button flat" type="button" onClick={onClose}>
+            <X size={19} />
+          </button>
+        </div>
+
+        <article className="portion-card surface">
+          <div className="portion-product">
+            <FoodImage name={selectedProduct.name} src={selectedProduct.imageUrl} />
+            <div>
+              <span>{selectedProduct.brand || 'Open Food Facts'}</span>
+              <h2>{selectedProduct.name}</h2>
+              <small>{formatNumber(selectedProduct.caloriesPer100g)} kcal por 100 g</small>
+            </div>
+          </div>
+
+          <div className="portion-input">
+            <label htmlFor="food-portion-grams">Peso de la porcion</label>
+            <div>
+              <input
+                autoFocus
+                id="food-portion-grams"
+                inputMode="decimal"
+                min="1"
+                step="1"
+                type="number"
+                value={grams}
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => setGrams(Math.max(0, Number(event.target.value)))}
+              />
+              <strong>g</strong>
+            </div>
+          </div>
+
+          <div className="nutrition-total">
+            <span>Calorias</span>
+            <strong>{formatNumber(nutrition.calories)} kcal</strong>
+          </div>
+
+          <div className="macro-grid">
+            <div>
+              <span>Proteina</span>
+              <strong>{formatNumber(nutrition.protein)} g</strong>
+            </div>
+            <div>
+              <span>Carbos</span>
+              <strong>{formatNumber(nutrition.carbs)} g</strong>
+            </div>
+            <div>
+              <span>Grasa</span>
+              <strong>{formatNumber(nutrition.fat)} g</strong>
+            </div>
+          </div>
+
+          <button
+            className="primary-button save-food-button"
+            disabled={!Number.isFinite(grams) || grams <= 0}
+            type="button"
+            onClick={() => onSave(selectedProduct, grams)}
+          >
+            <CheckCircle2 size={18} />
+            {saveLabel}
+          </button>
+        </article>
+
+        <FoodDataCredit />
+      </section>
+    )
+  }
+
+  return (
+    <section className="food-finder enter">
+      <div className="finder-head">
+        <button aria-label="Cerrar" className="icon-button flat" type="button" onClick={onClose}>
+          <X size={19} />
+        </button>
+        <div>
+          <span>Registro rapido</span>
+          <h1>Agregar alimento</h1>
+        </div>
+        <span aria-hidden="true" className="finder-head-spacer" />
+      </div>
+
+      <div className="finder-modes" role="tablist" aria-label="Metodo para agregar alimento">
+        <button
+          aria-selected={mode === 'search'}
+          className={mode === 'search' ? 'active' : ''}
+          role="tab"
+          type="button"
+          onClick={() => {
+            setMode('search')
+            setMessage('')
+            setStatus('idle')
+          }}
+        >
+          <Search size={17} />
+          Buscar
+        </button>
+        <button
+          aria-selected={mode === 'scan'}
+          className={mode === 'scan' ? 'active' : ''}
+          role="tab"
+          type="button"
+          onClick={() => {
+            setMode('scan')
+            setMessage('')
+            setStatus('idle')
+          }}
+        >
+          <ScanBarcode size={18} />
+          Escanear
+        </button>
+      </div>
+
+      {mode === 'search' ? (
+        <>
+          <form className="food-search" onSubmit={submitSearch}>
+            <Search size={18} />
+            <input
+              aria-label="Buscar alimento"
+              autoFocus
+              enterKeyHint="search"
+              placeholder="Yogurt griego, avena..."
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <button aria-label="Buscar" className="icon-button brand-button" disabled={status === 'loading'} type="submit">
+              {status === 'loading' ? <LoaderCircle className="spin" size={18} /> : <Search size={18} />}
+            </button>
+          </form>
+
+          <div className="food-results" aria-live="polite">
+            {results.map((product) => (
+              <button className="food-result" key={product.barcode} type="button" onClick={() => selectProduct(product)}>
+                <FoodImage name={product.name} src={product.imageUrl} />
+                <span>
+                  <strong>{product.name}</strong>
+                  <small>{product.brand || 'Sin marca'}</small>
+                </span>
+                <em>{formatNumber(product.caloriesPer100g)} kcal</em>
+              </button>
+            ))}
+            {hasSearched && !results.length && status !== 'loading' && !message && (
+              <div className="finder-empty">Sin resultados</div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="scanner-shell">
+          <div className="scanner-preview">
+            <video ref={videoRef} autoPlay muted playsInline />
+            <span className="scanner-frame" aria-hidden="true" />
+            {status === 'loading' && (
+              <span className="scanner-loading">
+                <LoaderCircle className="spin" size={22} />
+              </span>
+            )}
+          </div>
+
+          <form
+            className="barcode-manual"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void lookupBarcode(manualBarcode)
+            }}
+          >
+            <input
+              aria-label="Codigo de barras"
+              inputMode="numeric"
+              placeholder="Escribir codigo"
+              value={manualBarcode}
+              onChange={(event) => setManualBarcode(normalizeBarcode(event.target.value))}
+            />
+            <button className="secondary-button" disabled={status === 'loading'} type="submit">
+              Buscar
+            </button>
+          </form>
+        </div>
+      )}
+
+      {message && (
+        <div className={status === 'error' ? 'finder-message error' : 'finder-message'} role={status === 'error' ? 'alert' : 'status'}>
+          {message}
+        </div>
+      )}
+      <FoodDataCredit />
+    </section>
+  )
+}
+
+function FoodImage({ name, src }: { name: string; src?: string }) {
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    setFailed(false)
+  }, [src])
+
+  return (
+    <span className="food-image">
+      {src && !failed ? (
+        <img alt="" loading="lazy" src={src} onError={() => setFailed(true)} />
+      ) : (
+        <Utensils aria-label={name} size={19} />
+      )}
+    </span>
+  )
+}
+
+function FoodDataCredit() {
+  return (
+    <small className="food-credit">
+      Datos de{' '}
+      <a href="https://world.openfoodfacts.org/" rel="noreferrer" target="_blank">
+        Open Food Facts
+      </a>
+      . Verifica la etiqueta del producto.
+    </small>
+  )
+}
+
 function TodayView({
   creatineCompleted,
+  foodLogs,
   heroPhrase,
   meals,
+  onDeleteFoodLog,
+  onEditFoodLog,
+  openFoodFinder,
   sessions,
   startMeal,
   today,
   toggleCreatine,
 }: {
   creatineCompleted: boolean
+  foodLogs: FoodLog[]
   heroPhrase: string
   meals: Meal[]
+  onDeleteFoodLog: (foodLogId: string) => void
+  onEditFoodLog: (foodLog: FoodLog) => void
+  openFoodFinder: (request: FoodFinderRequest) => void
   sessions: MealSession[]
   startMeal: (mealId: string) => void
   today: string
   toggleCreatine: () => void
 }) {
   const daySummaries = useMemo(
-    () => buildDaySummaries(meals, sessions, creatineCompleted ? [today] : []),
-    [creatineCompleted, meals, sessions, today],
+    () => buildDaySummaries(meals, sessions, creatineCompleted ? [today] : [], foodLogs),
+    [creatineCompleted, foodLogs, meals, sessions, today],
   )
   const todaySummary = getDaySummary(daySummaries, today)
-  const completedCalories = todaySummary.sessions.reduce((total, session) => total + sessionCalories(session, getMeal(meals, session.mealId)), 0)
+  const completedCalories =
+    todaySummary.sessions.reduce((total, session) => total + sessionCalories(session, getMeal(meals, session.mealId)), 0) +
+    foodLogs.reduce((total, foodLog) => total + foodLog.calories, 0)
   const totalCalories = useMemo(() => plannedDayCalories(meals), [meals])
   const completedCount = todaySummary.completedMealIds.size
   const totalTasks = meals.length + 1
@@ -1050,6 +1638,45 @@ function TodayView({
         </div>
       </div>
 
+      <section className="quick-log surface">
+        <div>
+          <span>Registro rapido</span>
+          <strong>Agrega un alimento en segundos</strong>
+        </div>
+        <div className="quick-log-actions">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => openFoodFinder({ target: 'log', initialMode: 'search' })}
+          >
+            <Search size={17} />
+            Buscar
+          </button>
+          <button
+            className="primary-button compact"
+            type="button"
+            onClick={() => openFoodFinder({ target: 'log', initialMode: 'scan' })}
+          >
+            <ScanBarcode size={18} />
+            Escanear
+          </button>
+        </div>
+      </section>
+
+      {foodLogs.length > 0 && (
+        <section className="food-log-section">
+          <div className="section-head">
+            <span>Registrado hoy</span>
+            <strong>{formatNumber(foodLogs.reduce((total, foodLog) => total + foodLog.calories, 0))} kcal</strong>
+          </div>
+          <div className="food-log-list">
+            {foodLogs.map((foodLog) => (
+              <FoodLogRow foodLog={foodLog} key={foodLog.id} onDelete={onDeleteFoodLog} onEdit={onEditFoodLog} />
+            ))}
+          </div>
+        </section>
+      )}
+
       <button className={creatineCompleted ? 'creatine-card complete' : 'creatine-card'} type="button" onClick={toggleCreatine}>
         <span className="check-icon">{creatineCompleted ? <Check size={18} /> : <Circle size={18} />}</span>
         <span>
@@ -1066,16 +1693,36 @@ function TodayView({
         })}
       </div>
 
-      <section className="recommendations surface">
-        <div>
-          <strong>Base</strong>
-          <small>Del plan alimenticio</small>
-        </div>
-        {recommendations.map((item) => (
-          <span key={item}>{item}</span>
-        ))}
-      </section>
     </section>
+  )
+}
+
+function FoodLogRow({
+  foodLog,
+  onDelete,
+  onEdit,
+}: {
+  foodLog: FoodLog
+  onDelete: (foodLogId: string) => void
+  onEdit: (foodLog: FoodLog) => void
+}) {
+  return (
+    <article className="food-log-row">
+      <FoodImage name={foodLog.name} src={foodLog.imageUrl} />
+      <button className="food-log-main" type="button" onClick={() => onEdit(foodLog)}>
+        <strong>{foodLog.name}</strong>
+        <span>{formatNumber(foodLog.grams)} g · {foodLog.brand || 'Open Food Facts'}</span>
+      </button>
+      <strong>{formatNumber(foodLog.calories)} kcal</strong>
+      <button
+        aria-label={`Eliminar ${foodLog.name}`}
+        className="icon-button flat danger-text"
+        type="button"
+        onClick={() => onDelete(foodLog.id)}
+      >
+        <Trash2 size={16} />
+      </button>
+    </article>
   )
 }
 
@@ -1104,15 +1751,9 @@ function MealCard({
         <div>
           <span>{meal.slot || 'Comida'}</span>
           <h2>{meal.name}</h2>
+          <small>{meal.ingredients.length} ingredientes</small>
         </div>
         <strong>{formatNumber(mealCalories(meal))} kcal</strong>
-      </div>
-
-      <div className="ingredient-preview">
-        {meal.ingredients.slice(0, 4).map((ingredient) => (
-          <span key={ingredient.id}>{ingredient.name}</span>
-        ))}
-        {meal.ingredients.length > 4 && <span>+{meal.ingredients.length - 4}</span>}
       </div>
 
       <button className={complete ? 'primary-button done' : 'primary-button'} type="button" onClick={() => startMeal(meal.id)}>
@@ -1204,8 +1845,8 @@ function CalendarView({ state }: { state: AppState }) {
   const [visibleMonth, setVisibleMonth] = useState(latestSessionDate.slice(0, 7))
   const [selectedDate, setSelectedDate] = useState(latestSessionDate)
   const daySummaries = useMemo(
-    () => buildDaySummaries(state.meals, state.sessions, state.creatineDates),
-    [state.creatineDates, state.meals, state.sessions],
+    () => buildDaySummaries(state.meals, state.sessions, state.creatineDates, state.foodLogs),
+    [state.creatineDates, state.foodLogs, state.meals, state.sessions],
   )
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth, daySummaries), [daySummaries, visibleMonth])
   const selectedSummary = getDaySummary(daySummaries, selectedDate)
@@ -1290,6 +1931,16 @@ function CalendarView({ state }: { state: AppState }) {
             <small>{selectedSummary.creatineCompleted ? 'Hecho' : 'Pendiente'}</small>
           </article>
 
+          {selectedSummary.foodLogs.map((foodLog) => (
+            <article className="day-meal quick-food" key={foodLog.id}>
+              <div>
+                <strong>{foodLog.name}</strong>
+                <span>{formatNumber(foodLog.grams)} g · Registro rapido</span>
+              </div>
+              <small>{formatNumber(foodLog.calories)} kcal</small>
+            </article>
+          ))}
+
           {state.meals.map((meal) => {
             const session = selectedSummary.sessions.find((item) => item.mealId === meal.id)
             const complete = session ? isMealSessionComplete(session, meal) : false
@@ -1315,98 +1966,150 @@ function PlanView({
   deleteIngredient,
   deleteMeal,
   meals,
+  openFoodFinder,
   updateIngredient,
   updateMeal,
 }: {
   addIngredient: (mealId: string) => void
-  addMeal: () => void
+  addMeal: () => string
   deleteIngredient: (mealId: string, ingredientId: string) => void
   deleteMeal: (mealId: string) => void
   meals: Meal[]
+  openFoodFinder: (request: FoodFinderRequest) => void
   updateIngredient: (mealId: string, ingredientId: string, patch: Partial<Ingredient>) => void
   updateMeal: (mealId: string, patch: Partial<Meal>) => void
 }) {
+  const [expandedMealId, setExpandedMealId] = useState('')
+
   return (
     <section className="plan-view enter">
       <div className="plan-head">
         <div>
-          <span>Plan editable</span>
+          <span>Plan diario</span>
           <h1>{formatNumber(plannedDayCalories(meals))} kcal/dia</h1>
         </div>
-        <button aria-label="Agregar comida" className="icon-button brand-button" type="button" onClick={addMeal}>
+        <button
+          aria-label="Agregar comida"
+          className="icon-button brand-button"
+          type="button"
+          onClick={() => setExpandedMealId(addMeal())}
+        >
           <Plus size={19} />
         </button>
       </div>
 
       <div className="plan-list">
-        {meals.map((meal) => (
-          <article className="surface plan-card" key={meal.id}>
+        {meals.map((meal) => {
+          const expanded = expandedMealId === meal.id
+          return (
+          <article className={expanded ? 'surface plan-card expanded' : 'surface plan-card'} key={meal.id}>
             <div className="plan-card-head">
-              <div className="field-stack">
-                <label>
-                  <span>Comida</span>
-                  <input value={meal.name} onChange={(event) => updateMeal(meal.id, { name: event.target.value })} />
-                </label>
-                <label>
-                  <span>Horario</span>
-                  <input value={meal.slot} onChange={(event) => updateMeal(meal.id, { slot: event.target.value })} />
-                </label>
-              </div>
-              <button aria-label="Eliminar comida" className="icon-button danger" type="button" onClick={() => deleteMeal(meal.id)}>
-                <Trash2 size={17} />
+              <button className="plan-card-summary" type="button" onClick={() => setExpandedMealId(expanded ? '' : meal.id)}>
+                <span>{meal.slot || 'Comida'}</span>
+                <strong>{meal.name}</strong>
+                <small>{meal.ingredients.length} ingredientes · {formatNumber(mealCalories(meal))} kcal</small>
+              </button>
+              <button
+                aria-label={expanded ? 'Comprimir comida' : 'Editar comida'}
+                className="icon-button flat"
+                type="button"
+                onClick={() => setExpandedMealId(expanded ? '' : meal.id)}
+              >
+                {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
               </button>
             </div>
 
-            <div className="ingredient-editor-list">
-              {meal.ingredients.map((ingredient) => (
-                <div className="ingredient-editor" key={ingredient.id}>
-                  <input
-                    aria-label="Ingrediente"
-                    value={ingredient.name}
-                    onChange={(event) => updateIngredient(meal.id, ingredient.id, { name: event.target.value })}
-                  />
-                  <input
-                    aria-label="Cantidad"
-                    value={ingredient.amount}
-                    onChange={(event) => updateIngredient(meal.id, ingredient.id, { amount: event.target.value })}
-                  />
-                  <input
-                    aria-label="Calorias"
-                    inputMode="decimal"
-                    min="0"
-                    type="number"
-                    value={ingredient.calories}
-                    onFocus={(event) => event.currentTarget.select()}
-                    onChange={(event) => updateIngredient(meal.id, ingredient.id, { calories: Math.max(0, Number(event.target.value)) })}
-                  />
-                  <button
-                    aria-label="Eliminar ingrediente"
-                    className="icon-button tiny"
-                    disabled={meal.ingredients.length === 1}
-                    type="button"
-                    onClick={() => deleteIngredient(meal.id, ingredient.id)}
-                  >
-                    <Trash2 size={15} />
-                  </button>
+            {expanded && (
+              <div className="plan-card-editor">
+                <div className="field-stack">
+                  <label>
+                    <span>Comida</span>
+                    <input value={meal.name} onChange={(event) => updateMeal(meal.id, { name: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>Horario</span>
+                    <input value={meal.slot} onChange={(event) => updateMeal(meal.id, { slot: event.target.value })} />
+                  </label>
                 </div>
-              ))}
-            </div>
 
-            <div className="plan-card-footer">
-              <button className="secondary-button" type="button" onClick={() => addIngredient(meal.id)}>
-                <Plus size={16} />
-                Ingrediente
-              </button>
-              <strong>{formatNumber(mealCalories(meal))} kcal</strong>
-            </div>
+                <button
+                  className="food-lookup-button"
+                  type="button"
+                  onClick={() => openFoodFinder({ target: 'meal', initialMode: 'search', mealId: meal.id })}
+                >
+                  <Search size={18} />
+                  <span>
+                    <strong>Buscar o escanear alimento</strong>
+                    <small>Calorias calculadas por porcion</small>
+                  </span>
+                  <ChevronRight size={18} />
+                </button>
+
+                <div className="ingredient-editor-list">
+                  {meal.ingredients.map((ingredient) => (
+                    <div className="ingredient-editor" key={ingredient.id}>
+                      <input
+                        aria-label="Ingrediente"
+                        value={ingredient.name}
+                        onChange={(event) => updateIngredient(meal.id, ingredient.id, { name: event.target.value })}
+                      />
+                      <input
+                        aria-label="Cantidad"
+                        value={ingredient.amount}
+                        onChange={(event) => updateIngredient(meal.id, ingredient.id, { amount: event.target.value })}
+                      />
+                      <input
+                        aria-label="Calorias"
+                        inputMode="decimal"
+                        min="0"
+                        type="number"
+                        value={ingredient.calories}
+                        onFocus={(event) => event.currentTarget.select()}
+                        onChange={(event) =>
+                          updateIngredient(meal.id, ingredient.id, { calories: Math.max(0, Number(event.target.value)) })
+                        }
+                      />
+                      <button
+                        aria-label="Eliminar ingrediente"
+                        className="icon-button tiny"
+                        disabled={meal.ingredients.length === 1}
+                        type="button"
+                        onClick={() => deleteIngredient(meal.id, ingredient.id)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="plan-card-footer">
+                  <button className="secondary-button" type="button" onClick={() => addIngredient(meal.id)}>
+                    <Plus size={16} />
+                    Manual
+                  </button>
+                  <div>
+                    <button
+                      aria-label="Eliminar comida"
+                      className="icon-button danger"
+                      type="button"
+                      onClick={() => {
+                        deleteMeal(meal.id)
+                        setExpandedMealId('')
+                      }}
+                    >
+                      <Trash2 size={17} />
+                    </button>
+                    <button className="primary-button compact" type="button" onClick={() => setExpandedMealId('')}>
+                      Listo
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </article>
-        ))}
+          )
+        })}
       </div>
-
-      <section className="surface plan-note">
-        <Pencil size={18} />
-        <span>Las calorias son estimadas y editables por ingrediente.</span>
-      </section>
     </section>
   )
 }

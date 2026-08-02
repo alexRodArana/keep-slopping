@@ -47,15 +47,9 @@ export const defaultMeals: Meal[] = [
   },
 ]
 
-export const recommendations = [
-  'Tomar un vaso de agua antes de cada comida.',
-  'Tomar aproximadamente 3L de agua.',
-  'Pesar proteinas despues de su coccion.',
-  'Verduras libres en cualquier momento del dia.',
-]
-
 export const initialState: AppState = {
   creatineDates: [],
+  foodLogs: [],
   meals: defaultMeals,
   sessions: [],
 }

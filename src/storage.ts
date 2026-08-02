@@ -1,5 +1,5 @@
 import { initialState } from './data'
-import type { ActiveMealSession, AppState, Ingredient, Meal, MealSession } from './types'
+import type { ActiveMealSession, AppState, FoodLog, Ingredient, Meal, MealSession } from './types'
 
 const STORAGE_KEY = 'keep-slopping-state-v1'
 
@@ -9,6 +9,24 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const toNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+const toOptionalNumber = (value: unknown) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
+}
+
+const toImageUrl = (value: unknown) => {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' ? url.toString() : undefined
+  } catch {
+    return undefined
+  }
 }
 
 const normalizeIngredient = (value: unknown, index: number): Ingredient => {
@@ -26,6 +44,13 @@ const normalizeIngredient = (value: unknown, index: number): Ingredient => {
     name: String(value.name ?? 'Ingrediente'),
     amount: String(value.amount ?? ''),
     calories: Math.max(0, toNumber(value.calories)),
+    barcode: value.barcode ? String(value.barcode) : undefined,
+    imageUrl: toImageUrl(value.imageUrl),
+    grams: toOptionalNumber(value.grams),
+    caloriesPer100g: toOptionalNumber(value.caloriesPer100g),
+    proteinPer100g: toOptionalNumber(value.proteinPer100g),
+    carbsPer100g: toOptionalNumber(value.carbsPer100g),
+    fatPer100g: toOptionalNumber(value.fatPer100g),
   }
 }
 
@@ -46,13 +71,43 @@ const normalizeMeals = (value: unknown): Meal[] => {
     }))
     .filter((meal) => meal.name.trim() && meal.ingredients.length)
 
-  return meals.length ? meals : initialState.meals
+  return meals
 }
 
 const normalizeCheckedIds = (value: unknown) => (Array.isArray(value) ? value.map(String).filter(Boolean) : [])
 
 const normalizeDateList = (value: unknown) =>
   Array.isArray(value) ? [...new Set(value.map(String).filter(Boolean))].sort((a, b) => b.localeCompare(a)) : []
+
+const normalizeFoodLogs = (value: unknown): FoodLog[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .filter(isRecord)
+    .map((log, index) => ({
+      id: String(log.id ?? `food-log-${index + 1}`),
+      date: String(log.date ?? new Date().toISOString().slice(0, 10)),
+      createdAt: String(log.createdAt ?? new Date().toISOString()),
+      barcode: String(log.barcode ?? ''),
+      name: String(log.name ?? 'Alimento'),
+      brand: String(log.brand ?? ''),
+      imageUrl: toImageUrl(log.imageUrl),
+      servingGrams: Math.max(1, toNumber(log.servingGrams, 100)),
+      grams: Math.max(1, toNumber(log.grams, 100)),
+      caloriesPer100g: Math.max(0, toNumber(log.caloriesPer100g)),
+      proteinPer100g: Math.max(0, toNumber(log.proteinPer100g)),
+      carbsPer100g: Math.max(0, toNumber(log.carbsPer100g)),
+      fatPer100g: Math.max(0, toNumber(log.fatPer100g)),
+      calories: Math.max(0, toNumber(log.calories)),
+      protein: Math.max(0, toNumber(log.protein)),
+      carbs: Math.max(0, toNumber(log.carbs)),
+      fat: Math.max(0, toNumber(log.fat)),
+    }))
+    .filter((log) => log.name.trim() && log.grams > 0)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
 
 const normalizeActiveSession = (value: unknown): ActiveMealSession | undefined => {
   if (!isRecord(value)) {
@@ -144,6 +199,7 @@ export const normalizeState = (value: unknown): AppState => {
 
   return {
     creatineDates: normalizeDateList(value.creatineDates),
+    foodLogs: normalizeFoodLogs(value.foodLogs),
     meals,
     sessions: normalizeMealSessions(normalizeSessions(value.sessions), meals),
     activeSession: normalizeActiveMealSession(activeSession, meals),
