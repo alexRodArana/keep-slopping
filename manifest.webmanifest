@@ -1,12 +1,12 @@
 {
   "name": "Keep Slopping",
   "short_name": "Keep Slopping",
-  "description": "Registra comidas, ingredientes, calorias y cumplimiento diario.",
+  "description": "Registra comidas y calorias buscando alimentos o escaneando su codigo de barras.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
-  "background_color": "#101214",
-  "theme_color": "#101214",
+  "background_color": "#0d0f12",
+  "theme_color": "#0d0f12",
   "orientation": "portrait",
   "icons": [
     {
