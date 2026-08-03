@@ -372,6 +372,7 @@ html:not([data-theme='dark']) .brand-mark img {
 }
 
 .today-view,
+.food-view,
 .calendar-view,
 .plan-view,
 .meal-focus,
@@ -517,6 +518,38 @@ html:not([data-theme='dark']) .brand-mark img {
 .food-log-section {
   display: grid;
   gap: 9px;
+}
+
+.food-log-head > strong {
+  color: var(--brand-ink);
+  font-size: 15px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+}
+
+.food-log-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+  padding: 14px;
+  color: var(--brand);
+}
+
+.food-log-empty > div {
+  display: grid;
+  gap: 2px;
+}
+
+.food-log-empty strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 730;
+}
+
+.food-log-empty span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .section-head {
@@ -681,6 +714,7 @@ html:not([data-theme='dark']) .brand-mark img {
 
 .meal-focus,
 .food-finder,
+.food-view,
 .calendar-view,
 .plan-view {
   width: min(760px, 100%);
@@ -1963,9 +1997,9 @@ input:focus-visible {
     left: 50%;
     z-index: 60;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 5px;
-    width: min(344px, calc(100% - 24px));
+    width: min(390px, calc(100% - 24px));
     max-width: none;
     margin: 0;
     padding: 6px;

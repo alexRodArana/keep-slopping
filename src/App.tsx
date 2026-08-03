@@ -1,4 +1,5 @@
 import {
+  Apple,
   ArrowLeft,
   CalendarDays,
   Check,
@@ -896,6 +897,9 @@ function App() {
 
     vibrate(16)
     setFoodFinderRequest(null)
+    if (request.target === 'log') {
+      setActiveTab('food')
+    }
   }
 
   const content = foodFinderRequest ? (
@@ -919,13 +923,18 @@ function App() {
       foodLogs={state.foodLogs.filter((foodLog) => foodLog.date === today)}
       heroPhrase={currentFoodPhrase}
       meals={state.meals}
-      onDeleteFoodLog={deleteFoodLog}
-      onEditFoodLog={editFoodLog}
-      openFoodFinder={openFoodFinder}
       sessions={state.sessions}
       startMeal={startMeal}
       today={today}
       toggleCreatine={toggleCreatine}
+    />
+  ) : activeTab === 'food' ? (
+    <FoodLogView
+      foodLogs={state.foodLogs.filter((foodLog) => foodLog.date === today)}
+      onDeleteFoodLog={deleteFoodLog}
+      onEditFoodLog={editFoodLog}
+      openFoodFinder={openFoodFinder}
+      today={today}
     />
   ) : activeTab === 'calendar' ? (
     <CalendarView state={state} />
@@ -1029,6 +1038,12 @@ function App() {
       {!isFocusMode && (
         <nav className="tabs" aria-label="Navegacion principal">
           <TabButton active={activeTab === 'today'} icon={<Utensils size={19} />} label="Hoy" onClick={() => setActiveTab('today')} />
+          <TabButton
+            active={activeTab === 'food'}
+            icon={<Apple size={19} />}
+            label="Alimentos"
+            onClick={() => setActiveTab('food')}
+          />
           <TabButton
             active={activeTab === 'calendar'}
             icon={<CalendarDays size={19} />}
@@ -1149,6 +1164,7 @@ function TabButton({
 }) {
   return (
     <button
+      aria-current={active ? 'page' : undefined}
       className={active ? 'tab active' : 'tab'}
       type="button"
       onClick={() => {
@@ -1584,9 +1600,6 @@ function TodayView({
   foodLogs,
   heroPhrase,
   meals,
-  onDeleteFoodLog,
-  onEditFoodLog,
-  openFoodFinder,
   sessions,
   startMeal,
   today,
@@ -1596,9 +1609,6 @@ function TodayView({
   foodLogs: FoodLog[]
   heroPhrase: string
   meals: Meal[]
-  onDeleteFoodLog: (foodLogId: string) => void
-  onEditFoodLog: (foodLog: FoodLog) => void
-  openFoodFinder: (request: FoodFinderRequest) => void
   sessions: MealSession[]
   startMeal: (mealId: string) => void
   today: string
@@ -1638,10 +1648,55 @@ function TodayView({
         </div>
       </div>
 
+      <button className={creatineCompleted ? 'creatine-card complete' : 'creatine-card'} type="button" onClick={toggleCreatine}>
+        <span className="check-icon">{creatineCompleted ? <Check size={18} /> : <Circle size={18} />}</span>
+        <span>
+          <strong>Creatina</strong>
+          <small>Tomar hoy</small>
+        </span>
+        <em>{creatineCompleted ? 'Hecho' : 'Pendiente'}</em>
+      </button>
+
+      <div className="meal-list">
+        {meals.map((meal) => {
+          const complete = todaySummary.completedMealIds.has(meal.id)
+          return <MealCard complete={complete} key={meal.id} meal={meal} startMeal={startMeal} />
+        })}
+      </div>
+
+    </section>
+  )
+}
+
+function FoodLogView({
+  foodLogs,
+  onDeleteFoodLog,
+  onEditFoodLog,
+  openFoodFinder,
+  today,
+}: {
+  foodLogs: FoodLog[]
+  onDeleteFoodLog: (foodLogId: string) => void
+  onEditFoodLog: (foodLog: FoodLog) => void
+  openFoodFinder: (request: FoodFinderRequest) => void
+  today: string
+}) {
+  const loggedCalories = foodLogs.reduce((total, foodLog) => total + foodLog.calories, 0)
+
+  return (
+    <section className="food-view enter">
+      <div className="plan-head food-log-head">
+        <div>
+          <span>{formatDate(today)}</span>
+          <h1>Alimentos</h1>
+        </div>
+        <strong>{formatNumber(loggedCalories)} kcal</strong>
+      </div>
+
       <section className="quick-log surface">
         <div>
-          <span>Registro rapido</span>
-          <strong>Agrega un alimento en segundos</strong>
+          <span>Registro diario</span>
+          <strong>Busca o escanea un alimento</strong>
         </div>
         <div className="quick-log-actions">
           <button
@@ -1663,36 +1718,31 @@ function TodayView({
         </div>
       </section>
 
-      {foodLogs.length > 0 && (
-        <section className="food-log-section">
-          <div className="section-head">
-            <span>Registrado hoy</span>
-            <strong>{formatNumber(foodLogs.reduce((total, foodLog) => total + foodLog.calories, 0))} kcal</strong>
-          </div>
+      <section className="food-log-section" aria-label="Alimentos registrados hoy">
+        <div className="section-head">
+          <span>Registrado hoy</span>
+          <strong>
+            {foodLogs.length} {foodLogs.length === 1 ? 'alimento' : 'alimentos'}
+          </strong>
+        </div>
+        {foodLogs.length > 0 ? (
           <div className="food-log-list">
             {foodLogs.map((foodLog) => (
               <FoodLogRow foodLog={foodLog} key={foodLog.id} onDelete={onDeleteFoodLog} onEdit={onEditFoodLog} />
             ))}
           </div>
-        </section>
-      )}
+        ) : (
+          <div className="food-log-empty surface">
+            <Apple size={20} />
+            <div>
+              <strong>Sin alimentos registrados</strong>
+              <span>Tu registro de hoy aparecera aqui.</span>
+            </div>
+          </div>
+        )}
+      </section>
 
-      <button className={creatineCompleted ? 'creatine-card complete' : 'creatine-card'} type="button" onClick={toggleCreatine}>
-        <span className="check-icon">{creatineCompleted ? <Check size={18} /> : <Circle size={18} />}</span>
-        <span>
-          <strong>Creatina</strong>
-          <small>Tomar hoy</small>
-        </span>
-        <em>{creatineCompleted ? 'Hecho' : 'Pendiente'}</em>
-      </button>
-
-      <div className="meal-list">
-        {meals.map((meal) => {
-          const complete = todaySummary.completedMealIds.has(meal.id)
-          return <MealCard complete={complete} key={meal.id} meal={meal} startMeal={startMeal} />
-        })}
-      </div>
-
+      <FoodDataCredit />
     </section>
   )
 }

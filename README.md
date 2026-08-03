@@ -5,7 +5,7 @@ Aplicacion PWA mobile-first para seguir un plan alimenticio y registrar calorias
 ## Features
 
 - Plan diario editable con comidas, ingredientes, cantidades y calorias.
-- Registro rapido mediante busqueda o escaneo de codigo de barras.
+- Tab dedicada para registrar alimentos mediante busqueda o escaneo de codigo de barras.
 - Calculo automatico de calorias y macronutrientes segun los gramos de la porcion.
 - Modo de enfoque para iniciar una comida y marcar sus ingredientes.
 - Progreso persistente sin duplicar una comida al rehacerla el mismo dia.

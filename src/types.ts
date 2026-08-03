@@ -1,4 +1,4 @@
-export type TabKey = 'today' | 'calendar' | 'plan'
+export type TabKey = 'today' | 'food' | 'calendar' | 'plan'
 
 export type ThemeMode = 'dark' | 'light'
 

@@ -53,6 +53,8 @@ describe('quick food logging', () => {
 
     render(<App />)
 
+    expect(screen.queryByRole('button', { name: 'Buscar' })).toBeNull()
+    fireEvent.click(await screen.findByRole('button', { name: 'Alimentos' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Buscar' }))
     const searchInput = screen.getByRole('searchbox', { name: 'Buscar alimento' })
     fireEvent.change(searchInput, { target: { value: 'yogurt griego' } })
