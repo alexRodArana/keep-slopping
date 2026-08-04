@@ -224,6 +224,12 @@ html:not([data-theme='dark']) .brand-mark img {
   box-shadow: none;
 }
 
+.tabs-wrap {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
 .tabs {
   display: flex;
   align-items: center;
@@ -231,7 +237,7 @@ html:not([data-theme='dark']) .brand-mark img {
   gap: 5px;
   width: fit-content;
   max-width: calc(100% - 24px);
-  margin: 16px auto 0;
+  margin: 16px 12px 0;
   padding: 5px;
   overflow-x: auto;
   background: var(--segmented);

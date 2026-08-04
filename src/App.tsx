@@ -1036,22 +1036,24 @@ function App() {
       </header>
 
       {!isFocusMode && (
-        <nav className="tabs" aria-label="Navegacion principal">
-          <TabButton active={activeTab === 'today'} icon={<Utensils size={19} />} label="Hoy" onClick={() => setActiveTab('today')} />
-          <TabButton
-            active={activeTab === 'food'}
-            icon={<Apple size={19} />}
-            label="Alimentos"
-            onClick={() => setActiveTab('food')}
-          />
-          <TabButton
-            active={activeTab === 'calendar'}
-            icon={<CalendarDays size={19} />}
-            label="Calendario"
-            onClick={() => setActiveTab('calendar')}
-          />
-          <TabButton active={activeTab === 'plan'} icon={<Settings2 size={19} />} label="Plan" onClick={() => setActiveTab('plan')} />
-        </nav>
+        <div className="tabs-wrap">
+          <nav className="tabs" aria-label="Navegacion principal">
+            <TabButton active={activeTab === 'today'} icon={<Utensils size={19} />} label="Hoy" onClick={() => setActiveTab('today')} />
+            <TabButton
+              active={activeTab === 'food'}
+              icon={<Apple size={19} />}
+              label="Alimentos"
+              onClick={() => setActiveTab('food')}
+            />
+            <TabButton
+              active={activeTab === 'calendar'}
+              icon={<CalendarDays size={19} />}
+              label="Calendario"
+              onClick={() => setActiveTab('calendar')}
+            />
+            <TabButton active={activeTab === 'plan'} icon={<Settings2 size={19} />} label="Plan" onClick={() => setActiveTab('plan')} />
+          </nav>
+        </div>
       )}
 
       <main className={isFocusMode ? 'main main-focus' : `main main-${activeTab}`}>
