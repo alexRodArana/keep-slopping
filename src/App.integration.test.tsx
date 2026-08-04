@@ -1,8 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FoodProduct } from './types'
 
-const { product } = vi.hoisted(() => ({
+const { loadStateMock, product } = vi.hoisted(() => ({
+  loadStateMock: vi.fn(),
   product: {
     barcode: '7702001163885',
     brand: 'Alpina',
@@ -16,13 +17,7 @@ const { product } = vi.hoisted(() => ({
 }))
 
 vi.mock('./storage', () => ({
-  loadState: vi.fn(() => ({
-    activeSession: undefined,
-    creatineDates: [],
-    foodLogs: [],
-    meals: [],
-    sessions: [],
-  })),
+  loadState: loadStateMock,
   saveState: vi.fn(),
 }))
 
@@ -47,6 +42,16 @@ vi.mock('./foodApi', async () => {
 })
 
 describe('quick food logging', () => {
+  beforeEach(() => {
+    loadStateMock.mockReturnValue({
+      activeSession: undefined,
+      creatineDates: [],
+      foodLogs: [],
+      meals: [],
+      sessions: [],
+    })
+  })
+
   it('searches a product, adjusts the portion and logs calculated calories', async () => {
     window.localStorage.setItem('keep-slopping-theme', 'dark')
     const { default: App } = await import('./App')
@@ -68,5 +73,49 @@ describe('quick food logging', () => {
     expect(await screen.findByText('Registrado hoy')).toBeTruthy()
     expect(screen.getAllByText('232 kcal').length).toBeGreaterThan(0)
     expect(screen.getByText(/200 g/)).toBeTruthy()
+  })
+
+  it('asks for an option and saves the selected recipe', async () => {
+    loadStateMock.mockReturnValue({
+      activeSession: undefined,
+      creatineDates: [],
+      foodLogs: [],
+      meals: [
+        {
+          id: 'breakfast',
+          name: 'Desayuno',
+          slot: 'Mañana',
+          ingredients: [{ id: 'shake-protein', name: 'Proteína', amount: '1 medida', calories: 120 }],
+          options: [
+            {
+              id: 'shake',
+              name: 'Licuado',
+              ingredients: [{ id: 'shake-protein', name: 'Proteína', amount: '1 medida', calories: 120 }],
+            },
+            {
+              id: 'omelette',
+              name: 'Omelette',
+              ingredients: [
+                { id: 'omelette-egg', name: 'Huevo', amount: '1 pieza', calories: 72 },
+                { id: 'omelette-whites', name: 'Claras', amount: '90 ml', calories: 47 },
+              ],
+            },
+          ],
+        },
+      ],
+      sessions: [],
+    })
+    const { default: App } = await import('./App')
+
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Elegir Omelette' }))
+    fireEvent.click(screen.getByRole('button', { name: /Huevo/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Claras/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Terminar comida' }))
+
+    expect(await screen.findByText('Omelette')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Rehacer' })).toBeTruthy()
   })
 })

@@ -18,6 +18,12 @@ export type Ingredient = {
   fatPer100g?: number
 }
 
+export type MealOption = {
+  id: string
+  name: string
+  ingredients: Ingredient[]
+}
+
 export type FoodProduct = {
   barcode: string
   name: string
@@ -46,11 +52,13 @@ export type Meal = {
   name: string
   slot: string
   ingredients: Ingredient[]
+  options?: MealOption[]
 }
 
 export type ActiveMealSession = {
   id: string
   mealId: string
+  optionId?: string
   date: string
   startedAt: string
   checkedIngredientIds: string[]

@@ -1,5 +1,6 @@
 import { initialState } from './data'
-import type { ActiveMealSession, AppState, FoodLog, Ingredient, Meal, MealSession } from './types'
+import { getMealOption } from './mealUtils'
+import type { ActiveMealSession, AppState, FoodLog, Ingredient, Meal, MealOption, MealSession } from './types'
 
 const STORAGE_KEY = 'keep-slopping-state-v1'
 
@@ -54,6 +55,23 @@ const normalizeIngredient = (value: unknown, index: number): Ingredient => {
   }
 }
 
+const normalizeMealOptions = (value: unknown, mealId: string): MealOption[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .filter(isRecord)
+    .map((option, optionIndex) => ({
+      id: String(option.id ?? `${mealId}-option-${optionIndex + 1}`),
+      name: String(option.name ?? `Opción ${optionIndex + 1}`),
+      ingredients: Array.isArray(option.ingredients)
+        ? option.ingredients.map(normalizeIngredient).filter((ingredient) => ingredient.name.trim())
+        : [],
+    }))
+    .filter((option) => option.name.trim() && option.ingredients.length)
+}
+
 const normalizeMeals = (value: unknown): Meal[] => {
   if (!Array.isArray(value)) {
     return initialState.meals
@@ -61,15 +79,22 @@ const normalizeMeals = (value: unknown): Meal[] => {
 
   const meals = value
     .filter(isRecord)
-    .map((meal, mealIndex) => ({
-      id: String(meal.id ?? `meal-${mealIndex + 1}`),
-      name: String(meal.name ?? `Comida ${mealIndex + 1}`),
-      slot: String(meal.slot ?? ''),
-      ingredients: Array.isArray(meal.ingredients)
+    .map((meal, mealIndex) => {
+      const id = String(meal.id ?? `meal-${mealIndex + 1}`)
+      const ingredients = Array.isArray(meal.ingredients)
         ? meal.ingredients.map(normalizeIngredient).filter((ingredient) => ingredient.name.trim())
-        : [],
-    }))
-    .filter((meal) => meal.name.trim() && meal.ingredients.length)
+        : []
+      const options = normalizeMealOptions(meal.options, id)
+
+      return {
+        id,
+        name: String(meal.name ?? `Comida ${mealIndex + 1}`),
+        slot: String(meal.slot ?? ''),
+        ingredients,
+        options: options.length ? options : undefined,
+      }
+    })
+    .filter((meal) => meal.name.trim() && (meal.ingredients.length || meal.options?.length))
 
   return meals
 }
@@ -117,6 +142,7 @@ const normalizeActiveSession = (value: unknown): ActiveMealSession | undefined =
   return {
     id: String(value.id ?? `active-${Date.now()}`),
     mealId: String(value.mealId ?? ''),
+    optionId: value.optionId ? String(value.optionId) : undefined,
     date: String(value.date ?? new Date().toISOString().slice(0, 10)),
     startedAt: String(value.startedAt ?? new Date().toISOString()),
     checkedIngredientIds: normalizeCheckedIds(value.checkedIngredientIds),
@@ -131,6 +157,7 @@ const normalizeSessions = (value: unknown): MealSession[] => {
   return value.filter(isRecord).map((session, index) => ({
     id: String(session.id ?? `session-${index + 1}`),
     mealId: String(session.mealId ?? ''),
+    optionId: session.optionId ? String(session.optionId) : undefined,
     date: String(session.date ?? new Date().toISOString().slice(0, 10)),
     startedAt: String(session.startedAt ?? new Date().toISOString()),
     endedAt: String(session.endedAt ?? session.startedAt ?? new Date().toISOString()),
@@ -147,17 +174,21 @@ const getSessionTime = (session: Pick<MealSession, 'startedAt' | 'endedAt'>) => 
 }
 
 const normalizeMealSessions = (sessions: MealSession[], meals: Meal[]) => {
-  const ingredientIdsByMeal = new Map(meals.map((meal) => [meal.id, new Set(meal.ingredients.map((ingredient) => ingredient.id))]))
+  const mealsById = new Map(meals.map((meal) => [meal.id, meal]))
   const latestSessions = new Map<string, MealSession>()
 
   sessions.forEach((session) => {
-    const ingredientIds = ingredientIdsByMeal.get(session.mealId)
-    if (!ingredientIds) {
+    const meal = mealsById.get(session.mealId)
+    if (!meal) {
       return
     }
 
+    const option = getMealOption(meal, session.optionId)
+    const ingredientIds = new Set(option.ingredients.map((ingredient) => ingredient.id))
+
     const cleanedSession = {
       ...session,
+      optionId: option.id,
       checkedIngredientIds: session.checkedIngredientIds.filter((id) => ingredientIds.has(id)),
     }
     const key = `${cleanedSession.date}::${cleanedSession.mealId}`
@@ -181,10 +212,12 @@ const normalizeActiveMealSession = (activeSession: ActiveMealSession | undefined
     return undefined
   }
 
-  const ingredientIds = new Set(meal.ingredients.map((ingredient) => ingredient.id))
+  const option = getMealOption(meal, activeSession.optionId)
+  const ingredientIds = new Set(option.ingredients.map((ingredient) => ingredient.id))
 
   return {
     ...activeSession,
+    optionId: option.id,
     checkedIngredientIds: activeSession.checkedIngredientIds.filter((id) => ingredientIds.has(id)),
   }
 }
