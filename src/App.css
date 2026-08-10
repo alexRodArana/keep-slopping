@@ -292,6 +292,11 @@ html:not([data-theme='dark']) .brand-mark img {
 
 .tab.active svg {
   transform: scale(1.08);
+  animation: tabIconIn 380ms var(--ease-snappy) both;
+}
+
+.tab.active span {
+  animation: tabLabelIn 340ms var(--ease-smooth) both;
 }
 
 .main {
@@ -493,6 +498,10 @@ html:not([data-theme='dark']) .brand-mark img {
   transition: width 500ms var(--ease-smooth);
 }
 
+.day-progress span[style*='100%'] {
+  animation: progressComplete 620ms var(--ease-smooth);
+}
+
 .quick-log {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -674,6 +683,11 @@ html:not([data-theme='dark']) .brand-mark img {
 .meal-card.complete span,
 .meal-card.complete small {
   color: var(--on-brand);
+}
+
+.meal-card.complete .primary-button svg,
+.finish-button.complete svg {
+  animation: checkPop 380ms var(--ease-snappy) both;
 }
 
 .meal-card-head,
@@ -948,6 +962,11 @@ html:not([data-theme='dark']) .brand-mark img {
   border-color: transparent;
 }
 
+.check-row.checked .check-icon svg,
+.creatine-card.complete .check-icon svg {
+  animation: checkPop 380ms var(--ease-snappy) both;
+}
+
 .check-row > span:nth-child(2),
 .creatine-card > span:nth-child(2) {
   min-width: 0;
@@ -991,6 +1010,10 @@ html:not([data-theme='dark']) .brand-mark img {
   display: grid;
   gap: 14px;
   padding: 18px;
+}
+
+.selected-day {
+  animation: selectionIn 360ms var(--ease-smooth) both;
 }
 
 .calendar-head {
@@ -1090,6 +1113,7 @@ html:not([data-theme='dark']) .brand-mark img {
   box-shadow:
     0 0 0 3px var(--focus),
     0 7px 18px color-mix(in srgb, var(--brand) 14%, transparent);
+  animation: calendarSelect 340ms var(--ease-snappy);
 }
 
 .calendar-day.selected:not(.partial):not(.fulfilled) {
@@ -1127,6 +1151,7 @@ html:not([data-theme='dark']) .brand-mark img {
   background: var(--field);
   border: 1px solid transparent;
   border-radius: 8px;
+  animation: listItemIn 380ms var(--ease-smooth) both;
 }
 
 .day-meal.done {
@@ -1186,6 +1211,7 @@ html:not([data-theme='dark']) .brand-mark img {
   gap: 0;
   padding: 0;
   overflow: hidden;
+  animation: listItemIn 380ms var(--ease-smooth) both;
 }
 
 .plan-card-head {
@@ -1477,6 +1503,33 @@ html:not([data-theme='dark']) .brand-mark img {
     box-shadow 320ms var(--ease-smooth),
     transform 320ms var(--ease-smooth);
   animation: cardIn 440ms var(--ease-smooth) both;
+}
+
+.meal-list > .meal-card:nth-child(2),
+.meal-option-list > .meal-option-card:nth-child(2),
+.food-results > .food-result:nth-child(2),
+.food-log-list > .food-log-row:nth-child(2),
+.plan-list > .plan-card:nth-child(2),
+.day-meals > .day-meal:nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.meal-list > .meal-card:nth-child(3),
+.meal-option-list > .meal-option-card:nth-child(3),
+.food-results > .food-result:nth-child(3),
+.food-log-list > .food-log-row:nth-child(3),
+.plan-list > .plan-card:nth-child(3),
+.day-meals > .day-meal:nth-child(3) {
+  animation-delay: 80ms;
+}
+
+.meal-list > .meal-card:nth-child(n + 4),
+.meal-option-list > .meal-option-card:nth-child(n + 4),
+.food-results > .food-result:nth-child(n + 4),
+.food-log-list > .food-log-row:nth-child(n + 4),
+.plan-list > .plan-card:nth-child(n + 4),
+.day-meals > .day-meal:nth-child(n + 4) {
+  animation-delay: 120ms;
 }
 
 .food-result .food-image {
@@ -1947,6 +2000,10 @@ input:focus-visible {
   transform: translate(-50%, 0) scale(1);
 }
 
+.header-actions > .icon-button:last-child svg {
+  animation: controlIconIn 360ms var(--ease-snappy) both;
+}
+
 .spin {
   animation: spin 900ms linear infinite;
 }
@@ -2039,6 +2096,100 @@ input:focus-visible {
   }
   100% {
     transform: scale(1);
+  }
+}
+
+@keyframes tabIconIn {
+  0% {
+    opacity: 0.55;
+    transform: translateY(3px) scale(0.82);
+  }
+  65% {
+    transform: translateY(-1px) scale(1.14);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1.08);
+  }
+}
+
+@keyframes tabLabelIn {
+  from {
+    opacity: 0.62;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes checkPop {
+  0% {
+    opacity: 0;
+    transform: rotate(-18deg) scale(0.55);
+  }
+  62% {
+    transform: rotate(3deg) scale(1.16);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(0) scale(1);
+  }
+}
+
+@keyframes selectionIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes listItemIn {
+  from {
+    opacity: 0;
+    transform: translateY(7px) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes calendarSelect {
+  0% {
+    transform: scale(0.94);
+  }
+  68% {
+    transform: scale(1.045);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes progressComplete {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.24) saturate(1.08);
+  }
+}
+
+@keyframes controlIconIn {
+  from {
+    opacity: 0;
+    transform: rotate(-20deg) scale(0.78);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0) scale(1);
   }
 }
 

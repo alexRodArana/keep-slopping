@@ -2032,7 +2032,7 @@ function CalendarView({ state }: { state: AppState }) {
         </div>
       </section>
 
-      <section className="surface selected-day">
+      <section className="surface selected-day" key={selectedDate}>
         <div className="selected-day-head">
           <div>
             <span>{formatDate(selectedDate)}</span>
