@@ -1,6 +1,6 @@
 import type { AppState, Meal } from './types'
 
-export const defaultMeals: Meal[] = [
+const defaultMeals: Meal[] = [
   {
     id: 'breakfast',
     name: 'Desayuno',

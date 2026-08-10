@@ -42,6 +42,21 @@ import {
 } from 'react'
 import { initialState } from './data'
 import './App.css'
+import {
+  addMonths,
+  buildCalendarDays,
+  buildDaySummaries,
+  formatDate,
+  formatDuration,
+  formatMonth,
+  formatNumber,
+  getDaySummary,
+  getLatestMealSession,
+  isMealSessionComplete,
+  sessionCalories,
+  todayIso,
+  upsertMealSession,
+} from './domain'
 import { calculateNutrition, getFoodByBarcode, normalizeBarcode, searchFoods } from './foodApi'
 import { dayCalorieRange, getMealOption, getMealOptions, mealCalorieRange, optionCalories } from './mealUtils'
 import { loadState, saveState } from './storage'
@@ -69,23 +84,6 @@ import type {
   TabKey,
   ThemeMode,
 } from './types'
-
-type CalendarDay = {
-  date: string
-  dayNumber: number | null
-  isCurrentMonth: boolean
-  isFulfilled: boolean
-  hasProgress: boolean
-}
-
-type DaySummary = {
-  completedMealIds: Set<string>
-  creatineCompleted: boolean
-  foodLogs: FoodLog[]
-  fulfilled: boolean
-  hasProgress: boolean
-  sessions: MealSession[]
-}
 
 type FoodFinderMode = 'search' | 'scan'
 
@@ -126,23 +124,7 @@ const foodPhrases = [
 
 const defaultMealsSignature = JSON.stringify(initialState.meals)
 
-const createId = (prefix: string) =>
-  `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-
-const todayIso = () => toDateKey(new Date())
-
-const toDateKey = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-
-const toMonthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-
-const toLocalDate = (value: string) => new Date(`${value}T12:00:00`)
-
-const addMonths = (monthKey: string, offset: number) => {
-  const [year, month] = monthKey.split('-').map(Number)
-  const date = new Date(year, month - 1 + offset, 1)
-  return toMonthKey(date)
-}
+const createId = (prefix: string) => `${prefix}-${crypto.randomUUID()}`
 
 const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
 
@@ -150,35 +132,8 @@ const updateMetaContent = (selector: string, content: string) => {
   document.querySelector(selector)?.setAttribute('content', content)
 }
 
-const formatDate = (value: string) =>
-  new Intl.DateTimeFormat('es-MX', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(toLocalDate(value))
-
-const formatMonth = (value: string) => {
-  const label = new Intl.DateTimeFormat('es-MX', {
-    month: 'long',
-    year: 'numeric',
-  }).format(toLocalDate(`${value}-01`))
-  return `${label.charAt(0).toUpperCase()}${label.slice(1)}`
-}
-
-const formatNumber = (value: number) =>
-  new Intl.NumberFormat('es-MX', {
-    maximumFractionDigits: value >= 100 ? 0 : 1,
-  }).format(value)
-
 const formatCalorieRange = ({ min, max }: { min: number; max: number }) =>
   min === max ? `${formatNumber(min)} kcal` : `${formatNumber(min)}-${formatNumber(max)} kcal`
-
-const formatDuration = (seconds: number) => {
-  const safeSeconds = Math.max(0, Math.floor(seconds))
-  const minutes = Math.floor(safeSeconds / 60)
-  const remainingSeconds = safeSeconds % 60
-  return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
-}
 
 const vibrate = (duration = 8) => {
   if ('vibrate' in navigator) {
@@ -217,36 +172,6 @@ const updateOptionIngredients = (
   }
 }
 
-const getSessionKey = (session: Pick<MealSession, 'date' | 'mealId'>) => `${session.date}::${session.mealId}`
-
-const getSessionTime = (session: Pick<MealSession, 'startedAt'> & { endedAt?: string }) => {
-  const endedAt = session.endedAt ? new Date(session.endedAt).getTime() : Number.NaN
-  const startedAt = new Date(session.startedAt).getTime()
-
-  return Number.isNaN(endedAt) ? (Number.isNaN(startedAt) ? 0 : startedAt) : endedAt
-}
-
-const sortSessionsByRecency = (sessions: MealSession[]) =>
-  [...sessions].sort((a, b) => getSessionTime(b) - getSessionTime(a) || b.date.localeCompare(a.date))
-
-const getLatestMealSession = (sessions: MealSession[], mealId: string, date: string) =>
-  sortSessionsByRecency(sessions.filter((session) => session.mealId === mealId && session.date === date))[0]
-
-const upsertMealSession = (sessions: MealSession[], nextSession: MealSession) => {
-  const nextKey = getSessionKey(nextSession)
-  return sortSessionsByRecency([nextSession, ...sessions.filter((session) => getSessionKey(session) !== nextKey)])
-}
-
-const sessionCalories = (session: ActiveMealSession | MealSession, meal?: Meal) => {
-  if (!meal) {
-    return 0
-  }
-
-  return getMealOption(meal, session.optionId).ingredients
-    .filter((ingredient) => session.checkedIngredientIds.includes(ingredient.id))
-    .reduce((total, ingredient) => total + ingredient.calories, 0)
-}
-
 const foodLogToProduct = (log: FoodLog): FoodProduct => ({
   barcode: log.barcode,
   name: log.name,
@@ -259,113 +184,16 @@ const foodLogToProduct = (log: FoodLog): FoodProduct => ({
   fatPer100g: log.fatPer100g,
 })
 
-const isMealSessionComplete = (session: ActiveMealSession | MealSession, meal: Meal) => {
-  const ingredients = getMealOption(meal, session.optionId).ingredients
-  return ingredients.length > 0 && ingredients.every((ingredient) => session.checkedIngredientIds.includes(ingredient.id))
-}
-
-const emptyDaySummary = (): DaySummary => ({
-  completedMealIds: new Set(),
-  creatineCompleted: false,
-  foodLogs: [],
-  fulfilled: false,
-  hasProgress: false,
-  sessions: [],
-})
-
-const buildDaySummaries = (meals: Meal[], sessions: MealSession[], creatineDates: string[], foodLogs: FoodLog[]) => {
-  const mealsById = new Map(meals.map((meal) => [meal.id, meal]))
-  const summaries = new Map<string, DaySummary>()
-
-  const latestSessions = new Map<string, MealSession>()
-
-  sessions.forEach((session) => {
-    if (!mealsById.has(session.mealId)) {
-      return
-    }
-
-    const key = getSessionKey(session)
-    const current = latestSessions.get(key)
-    if (!current || getSessionTime(session) >= getSessionTime(current)) {
-      latestSessions.set(key, session)
-    }
-  })
-
-  latestSessions.forEach((session) => {
-    const summary = summaries.get(session.date) ?? emptyDaySummary()
-    summary.sessions.push(session)
-    summary.hasProgress = true
-
-    const meal = mealsById.get(session.mealId)
-    if (meal && isMealSessionComplete(session, meal)) {
-      summary.completedMealIds.add(session.mealId)
-    }
-
-    summaries.set(session.date, summary)
-  })
-
-  creatineDates.forEach((date) => {
-    const summary = summaries.get(date) ?? emptyDaySummary()
-    summary.creatineCompleted = true
-    summary.hasProgress = true
-    summaries.set(date, summary)
-  })
-
-  foodLogs.forEach((foodLog) => {
-    const summary = summaries.get(foodLog.date) ?? emptyDaySummary()
-    summary.foodLogs.push(foodLog)
-    summary.hasProgress = true
-    summaries.set(foodLog.date, summary)
-  })
-
-  summaries.forEach((summary) => {
-    summary.fulfilled = meals.length > 0 && summary.creatineCompleted && meals.every((meal) => summary.completedMealIds.has(meal.id))
-  })
-
-  return summaries
-}
-
-const getDaySummary = (summaries: Map<string, DaySummary>, date: string) => summaries.get(date) ?? emptyDaySummary()
-
-const buildCalendarDays = (monthKey: string, daySummaries: Map<string, DaySummary>): CalendarDay[] => {
-  const [year, month] = monthKey.split('-').map(Number)
-  const firstDay = new Date(year, month - 1, 1)
-  const startOffset = (firstDay.getDay() + 6) % 7
-  const daysInMonth = new Date(year, month, 0).getDate()
-  const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7
-
-  return Array.from({ length: totalCells }, (_, index) => {
-    const dayNumber = index - startOffset + 1
-
-    if (dayNumber < 1 || dayNumber > daysInMonth) {
-      return {
-        date: `${monthKey}-empty-${index}`,
-        dayNumber: null,
-        isCurrentMonth: false,
-        isFulfilled: false,
-        hasProgress: false,
-      }
-    }
-
-    const dateKey = `${monthKey}-${String(dayNumber).padStart(2, '0')}`
-    const summary = getDaySummary(daySummaries, dateKey)
-
-    return {
-      date: dateKey,
-      dayNumber,
-      isCurrentMonth: true,
-      isFulfilled: summary.fulfilled,
-      hasProgress: summary.hasProgress,
-    }
-  })
-}
-
 function App() {
   const [state, setState] = useState<AppState>(initialState)
   const stateRef = useRef(state)
+  const sessionRef = useRef<SyncSession | null>(null)
   const authHydrationRef = useRef(0)
   const initialAuthHandledRef = useRef(false)
   const isHydratingRef = useRef(false)
+  const remoteSaveQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const remoteSaveRevisionRef = useRef(0)
+  const remoteSyncedStateRef = useRef<AppState | undefined>(undefined)
   const [isLoaded, setIsLoaded] = useState(false)
   const [session, setSession] = useState<SyncSession | null>(null)
   const [syncEmail, setSyncEmail] = useState('')
@@ -386,11 +214,12 @@ function App() {
   const [foodPhraseIndex, setFoodPhraseIndex] = useState(() => Math.floor(Math.random() * foodPhrases.length))
   const [foodFinderRequest, setFoodFinderRequest] = useState<FoodFinderRequest | null>(null)
   const [optionPickerMealId, setOptionPickerMealId] = useState<string | null>(null)
-  const [now, setNow] = useState(() => Date.now())
 
   const today = todayIso()
-  const activeMeal = state.activeSession ? getMeal(state.meals, state.activeSession.mealId) : undefined
-  const optionPickerMeal = optionPickerMealId ? getMeal(state.meals, optionPickerMealId) : undefined
+  const mealsById = useMemo(() => new Map(state.meals.map((meal) => [meal.id, meal])), [state.meals])
+  const todayFoodLogs = useMemo(() => state.foodLogs.filter((foodLog) => foodLog.date === today), [state.foodLogs, today])
+  const activeMeal = state.activeSession ? mealsById.get(state.activeSession.mealId) : undefined
+  const optionPickerMeal = optionPickerMealId ? mealsById.get(optionPickerMealId) : undefined
   const currentAccent = accentOptions.find((option) => option.key === accent) ?? accentOptions[0]
   const currentFoodPhrase = foodPhrases[foodPhraseIndex]
   const totalCalories = useMemo(() => dayCalorieRange(state.meals), [state.meals])
@@ -400,13 +229,13 @@ function App() {
     setState(savedState)
   }, [])
 
-  const loadRemoteStateWithRetry = useCallback(async (userId: string) => {
+  const loadRemoteStateWithRetry = useCallback(async () => {
     try {
-      return await loadRemoteState(userId)
+      return await loadRemoteState()
     } catch (error) {
       await wait(500)
       try {
-        return await loadRemoteState(userId)
+        return await loadRemoteState()
       } catch {
         throw error
       }
@@ -421,7 +250,7 @@ function App() {
       setSyncStatus('loading')
 
       try {
-        const remoteState = await loadRemoteStateWithRetry(nextSession.user.id)
+        const remoteState = await loadRemoteStateWithRetry()
         if (authHydrationRef.current !== token) {
           return
         }
@@ -441,8 +270,9 @@ function App() {
         }
 
         if (shouldBootstrapRemote) {
-          await saveRemoteState(nextSession.user.id, nextState)
+          await saveRemoteState(nextState)
         }
+        remoteSyncedStateRef.current = nextState
       } finally {
         if (authHydrationRef.current === token) {
           isHydratingRef.current = false
@@ -532,29 +362,72 @@ function App() {
   }, [state])
 
   useEffect(() => {
+    sessionRef.current = session
+  }, [session])
+
+  useEffect(() => {
     if (!isLoaded || isHydratingRef.current) {
       return
     }
 
     const timeout = window.setTimeout(() => {
-      const persist = async () => {
-        try {
-          saveState(state)
-          if (session) {
-            await saveRemoteState(session.user.id, state)
-            setSyncStatus('synced')
-          } else {
-            setSyncStatus('local')
-          }
-        } catch (error) {
-          console.error('Could not save state', error)
-          setSyncStatus('error')
-          setSyncMessage('No se pudo guardar.')
-        }
+      try {
+        saveState(state)
+      } catch (error) {
+        console.error('Could not save local state', error)
+        setSyncStatus('error')
+        setSyncMessage('No se pudo guardar localmente.')
       }
+    }, 80)
 
-      persist()
-    }, 220)
+    return () => window.clearTimeout(timeout)
+  }, [isLoaded, state])
+
+  useEffect(() => {
+    if (!isLoaded || isHydratingRef.current) {
+      return
+    }
+
+    if (!session) {
+      remoteSaveRevisionRef.current += 1
+      remoteSyncedStateRef.current = undefined
+      return
+    }
+
+    if (state === remoteSyncedStateRef.current) {
+      return
+    }
+
+    const targetUserId = session.user.id
+    const timeout = window.setTimeout(() => {
+      const revision = remoteSaveRevisionRef.current + 1
+      remoteSaveRevisionRef.current = revision
+      const pendingSave = remoteSaveQueueRef.current.catch(() => undefined).then(async () => {
+        if (sessionRef.current?.user.id !== targetUserId) {
+          return
+        }
+        await saveRemoteState(state, remoteSyncedStateRef.current)
+        if (sessionRef.current?.user.id === targetUserId) {
+          remoteSyncedStateRef.current = state
+        }
+      })
+      remoteSaveQueueRef.current = pendingSave
+
+      void pendingSave
+        .then(() => {
+          if (remoteSaveRevisionRef.current === revision) {
+            setSyncStatus('synced')
+            setSyncMessage('')
+          }
+        })
+        .catch((error) => {
+          if (remoteSaveRevisionRef.current === revision) {
+            console.error('Could not save remote state', error)
+            setSyncStatus('error')
+            setSyncMessage('No se pudo sincronizar.')
+          }
+        })
+    }, 500)
 
     return () => window.clearTimeout(timeout)
   }, [isLoaded, session, state])
@@ -570,15 +443,6 @@ function App() {
     document.documentElement.dataset.accent = accent
     localStorage.setItem('keep-slopping-accent', accent)
   }, [accent])
-
-  useEffect(() => {
-    if (!state.activeSession) {
-      return
-    }
-
-    const interval = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(interval)
-  }, [state.activeSession])
 
   useEffect(() => {
     if (syncCooldown <= 0) {
@@ -1022,7 +886,6 @@ function App() {
   ) : state.activeSession && activeMeal ? (
     <MealFocus
       activeSession={state.activeSession}
-      elapsedSeconds={Math.floor((now - new Date(state.activeSession.startedAt).getTime()) / 1000)}
       meal={activeMeal}
       onCancel={cancelActiveMeal}
       onFinish={finishMeal}
@@ -1037,7 +900,7 @@ function App() {
   ) : activeTab === 'today' ? (
     <TodayView
       creatineCompleted={state.creatineDates.includes(today)}
-      foodLogs={state.foodLogs.filter((foodLog) => foodLog.date === today)}
+      foodLogs={todayFoodLogs}
       heroPhrase={currentFoodPhrase}
       meals={state.meals}
       sessions={state.sessions}
@@ -1047,7 +910,7 @@ function App() {
     />
   ) : activeTab === 'food' ? (
     <FoodLogView
-      foodLogs={state.foodLogs.filter((foodLog) => foodLog.date === today)}
+      foodLogs={todayFoodLogs}
       onDeleteFoodLog={deleteFoodLog}
       onEditFoodLog={editFoodLog}
       openFoodFinder={openFoodFinder}
@@ -1741,8 +1604,13 @@ function TodayView({
     [creatineCompleted, foodLogs, meals, sessions, today],
   )
   const todaySummary = getDaySummary(daySummaries, today)
+  const mealsById = useMemo(() => new Map(meals.map((meal) => [meal.id, meal])), [meals])
+  const sessionsByMealId = useMemo(
+    () => new Map(todaySummary.sessions.map((session) => [session.mealId, session])),
+    [todaySummary.sessions],
+  )
   const completedCalories =
-    todaySummary.sessions.reduce((total, session) => total + sessionCalories(session, getMeal(meals, session.mealId)), 0) +
+    todaySummary.sessions.reduce((total, session) => total + sessionCalories(session, mealsById.get(session.mealId)), 0) +
     foodLogs.reduce((total, foodLog) => total + foodLog.calories, 0)
   const totalCalories = useMemo(() => dayCalorieRange(meals), [meals])
   const completedCount = todaySummary.completedMealIds.size
@@ -1781,7 +1649,7 @@ function TodayView({
 
       <div className="meal-list">
         {meals.map((meal) => {
-          const mealSession = todaySummary.sessions.find((session) => session.mealId === meal.id)
+          const mealSession = sessionsByMealId.get(meal.id)
           const complete = todaySummary.completedMealIds.has(meal.id)
           return <MealCard complete={complete} key={meal.id} meal={meal} session={mealSession} startMeal={startMeal} />
         })}
@@ -2002,16 +1870,27 @@ function MealOptionPicker({
   )
 }
 
+function ElapsedTime({ startedAt }: { startedAt: string }) {
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [startedAt])
+
+  const startTime = new Date(startedAt).getTime()
+  const elapsedSeconds = Number.isNaN(startTime) ? 0 : Math.max(0, Math.floor((now - startTime) / 1000))
+  return <>{formatDuration(elapsedSeconds)}</>
+}
+
 function MealFocus({
   activeSession,
-  elapsedSeconds,
   meal,
   onCancel,
   onFinish,
   onToggleIngredient,
 }: {
   activeSession: ActiveMealSession
-  elapsedSeconds: number
   meal: Meal
   onCancel: () => void
   onFinish: () => void
@@ -2037,7 +1916,7 @@ function MealFocus({
         </div>
         <div className="timer-chip">
           <Clock3 size={15} />
-          {formatDuration(elapsedSeconds)}
+          <ElapsedTime startedAt={activeSession.startedAt} />
         </div>
       </div>
 

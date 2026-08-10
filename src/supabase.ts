@@ -21,7 +21,6 @@ const isValidUrl = (value: unknown) => {
 }
 
 const canInitializeSupabase = isValidUrl(supabaseUrl) && Boolean(supabaseAnonKey)
-const SHARED_TABLE = 'goy_app_state'
 const KEEP_SLOPPING_KEY = 'keepSlopping'
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -47,7 +46,7 @@ const getSupabaseErrorMessage = (error: unknown) => {
   return 'Error desconocido de Supabase'
 }
 
-export const supabase = (() => {
+const supabase = (() => {
   if (!canInitializeSupabase) {
     return null
   }
@@ -139,52 +138,57 @@ export const signOut = async () => {
   }
 }
 
-export const loadRemoteState = async (userId: string): Promise<AppState> => {
+export const loadRemoteState = async (): Promise<AppState> => {
   if (!supabase) {
     return initialState
   }
 
-  const { data, error } = await supabase.from(SHARED_TABLE).select('state').eq('user_id', userId).maybeSingle()
+  const { data, error } = await supabase.rpc('get_goy_app_state_sections', {
+    p_keys: [KEEP_SLOPPING_KEY],
+  })
 
   if (error) {
     throw error
   }
 
-  const sharedState = data?.state
-  if (isRecord(sharedState) && KEEP_SLOPPING_KEY in sharedState) {
-    return normalizeState(sharedState[KEEP_SLOPPING_KEY])
+  if (isRecord(data) && KEEP_SLOPPING_KEY in data) {
+    return normalizeState(data[KEEP_SLOPPING_KEY])
   }
 
   return normalizeState(initialState)
 }
 
-export const saveRemoteState = async (userId: string, state: AppState) => {
+export const saveRemoteState = async (state: AppState, previousState?: AppState) => {
   if (!supabase) {
     return
   }
 
-  const { data, error: readError } = await supabase.from(SHARED_TABLE).select('state').eq('user_id', userId).maybeSingle()
-
-  if (readError) {
-    throw readError
+  const patch: Record<string, unknown> = {}
+  if (!previousState || state.creatineDates !== previousState.creatineDates) {
+    patch.creatineDates = state.creatineDates
+  }
+  if (!previousState || state.foodLogs !== previousState.foodLogs) {
+    patch.foodLogs = state.foodLogs
+  }
+  if (!previousState || state.meals !== previousState.meals) {
+    patch.meals = state.meals
+  }
+  if (!previousState || state.sessions !== previousState.sessions) {
+    patch.sessions = state.sessions
+  }
+  if (!previousState || state.activeSession !== previousState.activeSession) {
+    patch.activeSession = state.activeSession ?? null
   }
 
-  const sharedState = isRecord(data?.state) ? data.state : {}
-  const nextState = {
-    ...sharedState,
-    [KEEP_SLOPPING_KEY]: state,
+  if (!Object.keys(patch).length) {
+    return
   }
 
-  const { error } = await supabase.from(SHARED_TABLE).upsert(
-    {
-      user_id: userId,
-      state: nextState,
-      updated_at: new Date().toISOString(),
-    },
-    {
-      onConflict: 'user_id',
-    },
-  )
+  const { error } = await supabase.rpc('merge_goy_app_state_section', {
+    p_section_key: KEEP_SLOPPING_KEY,
+    p_patch: patch,
+    p_remove_keys: [],
+  })
 
   if (error) {
     throw error

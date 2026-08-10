@@ -1,5 +1,13 @@
-const CACHE_NAME = 'keep-slopping-v10'
-const CORE_ASSETS = ['./', './manifest.webmanifest', './keep-slopping-icon.svg', './app-icon-192.png', './app-icon-512.png']
+const CACHE_NAME = 'keep-slopping-v11'
+const SCOPE = self.registration.scope
+const CORE_ASSETS = [
+  SCOPE,
+  `${SCOPE}manifest.webmanifest`,
+  `${SCOPE}keep-slopping-icon.svg`,
+  `${SCOPE}apple-touch-icon.png`,
+  `${SCOPE}app-icon-192.png`,
+  `${SCOPE}app-icon-512.png`,
+]
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS)))
@@ -22,26 +30,34 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(SCOPE, copy))
+          }
+          return response
+        })
+        .catch(() => caches.match(SCOPE).then((cached) => cached ?? Response.error())),
+    )
+    return
+  }
+
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
+    caches.match(event.request).then((cached) => {
+      if (cached) {
+        return cached
+      }
+
+      return fetch(event.request).then((response) => {
         if (response.ok) {
           const copy = response.clone()
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy))
         }
         return response
       })
-      .catch(async () => {
-        const cached = await caches.match(event.request)
-        if (cached) {
-          return cached
-        }
-
-        if (event.request.mode === 'navigate') {
-          return (await caches.match('./')) ?? Response.error()
-        }
-
-        return Response.error()
-      }),
+    }),
   )
 })

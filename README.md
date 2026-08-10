@@ -5,6 +5,7 @@ Aplicacion PWA mobile-first para seguir un plan alimenticio y registrar calorias
 ## Features
 
 - Plan diario editable con comidas, ingredientes, cantidades y calorias.
+- Varias opciones por comida con seleccion al iniciar y progreso independiente.
 - Tab dedicada para registrar alimentos mediante busqueda o escaneo de codigo de barras.
 - Calculo automatico de calorias y macronutrientes segun los gramos de la porcion.
 - Modo de enfoque para iniciar una comida y marcar sus ingredientes.
@@ -16,7 +17,7 @@ Los datos nutricionales provienen de [Open Food Facts](https://world.openfoodfac
 
 ## Supabase
 
-Keep Slopping uses the same Supabase project and authenticated users as The Goy Project. Meal data is stored inside the existing `goy_app_state` row under the `keepSlopping` key, so training data and meal plans stay tied to the same account without requiring another table.
+Keep Slopping usa el mismo proyecto de Supabase y las mismas cuentas que The Goy Project. Los datos se guardan bajo la clave `keepSlopping`; las funciones atomicas de Postgres leen y actualizan solo esa seccion para evitar consultas redundantes y conflictos con el historial de entrenamiento.
 
 Required environment variables:
 

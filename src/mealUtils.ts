@@ -5,7 +5,7 @@ export type CalorieRange = {
   max: number
 }
 
-export const legacyMealOptionId = (mealId: string) => `${mealId}-default`
+const legacyMealOptionId = (mealId: string) => `${mealId}-default`
 
 export const getMealOptions = (meal: Meal): MealOption[] => {
   if (meal.options?.length) {

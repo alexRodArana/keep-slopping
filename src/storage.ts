@@ -1,4 +1,5 @@
 import { initialState } from './data'
+import { getSessionTime, sortSessionsByRecency } from './domain'
 import { getMealOption } from './mealUtils'
 import type { ActiveMealSession, AppState, FoodLog, Ingredient, Meal, MealOption, MealSession } from './types'
 
@@ -166,13 +167,6 @@ const normalizeSessions = (value: unknown): MealSession[] => {
   }))
 }
 
-const getSessionTime = (session: Pick<MealSession, 'startedAt' | 'endedAt'>) => {
-  const endedAt = new Date(session.endedAt).getTime()
-  const startedAt = new Date(session.startedAt).getTime()
-
-  return Number.isNaN(endedAt) ? (Number.isNaN(startedAt) ? 0 : startedAt) : endedAt
-}
-
 const normalizeMealSessions = (sessions: MealSession[], meals: Meal[]) => {
   const mealsById = new Map(meals.map((meal) => [meal.id, meal]))
   const latestSessions = new Map<string, MealSession>()
@@ -199,7 +193,7 @@ const normalizeMealSessions = (sessions: MealSession[], meals: Meal[]) => {
     }
   })
 
-  return [...latestSessions.values()].sort((a, b) => getSessionTime(b) - getSessionTime(a) || b.date.localeCompare(a.date))
+  return sortSessionsByRecency([...latestSessions.values()])
 }
 
 const normalizeActiveMealSession = (activeSession: ActiveMealSession | undefined, meals: Meal[]) => {
