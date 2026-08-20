@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Session } from '@supabase/supabase-js'
 import { initialState } from './data'
-import { normalizeState } from './storage'
+import { hasLegacyStateKeys, normalizeState, requiresPlanMigration } from './storage'
 import type { AppState } from './types'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -152,7 +152,14 @@ export const loadRemoteState = async (): Promise<AppState> => {
   }
 
   if (isRecord(data) && KEEP_SLOPPING_KEY in data) {
-    return normalizeState(data[KEEP_SLOPPING_KEY])
+    const value = data[KEEP_SLOPPING_KEY]
+    const state = normalizeState(value)
+
+    if (requiresPlanMigration(value) || hasLegacyStateKeys(value)) {
+      await saveRemoteState(state)
+    }
+
+    return state
   }
 
   return normalizeState(initialState)
@@ -164,20 +171,23 @@ export const saveRemoteState = async (state: AppState, previousState?: AppState)
   }
 
   const patch: Record<string, unknown> = {}
+  if (!previousState || state.planVersion !== previousState.planVersion) {
+    patch.planVersion = state.planVersion
+  }
+  if (!previousState || state.target !== previousState.target) {
+    patch.target = state.target
+  }
+  if (!previousState || state.notes !== previousState.notes) {
+    patch.notes = state.notes
+  }
   if (!previousState || state.creatineDates !== previousState.creatineDates) {
     patch.creatineDates = state.creatineDates
-  }
-  if (!previousState || state.foodLogs !== previousState.foodLogs) {
-    patch.foodLogs = state.foodLogs
   }
   if (!previousState || state.meals !== previousState.meals) {
     patch.meals = state.meals
   }
   if (!previousState || state.sessions !== previousState.sessions) {
     patch.sessions = state.sessions
-  }
-  if (!previousState || state.activeSession !== previousState.activeSession) {
-    patch.activeSession = state.activeSession ?? null
   }
 
   if (!Object.keys(patch).length) {
@@ -187,7 +197,7 @@ export const saveRemoteState = async (state: AppState, previousState?: AppState)
   const { error } = await supabase.rpc('merge_goy_app_state_section', {
     p_section_key: KEEP_SLOPPING_KEY,
     p_patch: patch,
-    p_remove_keys: [],
+    p_remove_keys: ['foodLogs', 'activeSession'],
   })
 
   if (error) {

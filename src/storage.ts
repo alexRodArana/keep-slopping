@@ -1,170 +1,105 @@
-import { initialState } from './data'
-import { getSessionTime, sortSessionsByRecency } from './domain'
-import { getMealOption } from './mealUtils'
-import type { ActiveMealSession, AppState, FoodLog, Ingredient, Meal, MealOption, MealSession } from './types'
+import { CURRENT_PLAN_VERSION, defaultMeals, defaultNotes, defaultTarget } from './data'
+import type { AppState, Ingredient, Meal, MealSession, Nutrition } from './types'
 
 const STORAGE_KEY = 'keep-slopping-state-v1'
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
-const toNumber = (value: unknown, fallback = 0) => {
+const toNonNegativeNumber = (value: unknown, fallback: number) => {
   const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : fallback
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
 }
 
-const toOptionalNumber = (value: unknown) => {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
-}
+const cloneNutrition = (nutrition: Nutrition): Nutrition => ({ ...nutrition })
 
-const toImageUrl = (value: unknown) => {
-  if (typeof value !== 'string') {
-    return undefined
-  }
+const cloneMeals = (meals: Meal[]): Meal[] =>
+  meals.map((meal) => ({
+    ...meal,
+    ingredients: meal.ingredients.map((ingredient) => ({ ...ingredient })),
+    nutrition: cloneNutrition(meal.nutrition),
+  }))
 
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' ? url.toString() : undefined
-  } catch {
-    return undefined
-  }
-}
+const freshInitialState = (creatineDates: string[] = []): AppState => ({
+  planVersion: CURRENT_PLAN_VERSION,
+  target: cloneNutrition(defaultTarget),
+  notes: [...defaultNotes],
+  creatineDates,
+  meals: cloneMeals(defaultMeals),
+  sessions: [],
+})
 
-const normalizeIngredient = (value: unknown, index: number): Ingredient => {
+const normalizeNutrition = (value: unknown, fallback: Nutrition): Nutrition => {
   if (!isRecord(value)) {
-    return {
-      id: `ingredient-${index + 1}`,
-      name: 'Ingrediente',
-      amount: '',
-      calories: 0,
-    }
+    return cloneNutrition(fallback)
   }
 
   return {
-    id: String(value.id ?? `ingredient-${index + 1}`),
-    name: String(value.name ?? 'Ingrediente'),
-    amount: String(value.amount ?? ''),
-    calories: Math.max(0, toNumber(value.calories)),
-    barcode: value.barcode ? String(value.barcode) : undefined,
-    imageUrl: toImageUrl(value.imageUrl),
-    grams: toOptionalNumber(value.grams),
-    caloriesPer100g: toOptionalNumber(value.caloriesPer100g),
-    proteinPer100g: toOptionalNumber(value.proteinPer100g),
-    carbsPer100g: toOptionalNumber(value.carbsPer100g),
-    fatPer100g: toOptionalNumber(value.fatPer100g),
+    calories: toNonNegativeNumber(value.calories, fallback.calories),
+    protein: toNonNegativeNumber(value.protein, fallback.protein),
+    carbs: toNonNegativeNumber(value.carbs, fallback.carbs),
+    fat: toNonNegativeNumber(value.fat, fallback.fat),
   }
 }
 
-const normalizeMealOptions = (value: unknown, mealId: string): MealOption[] => {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  return value
-    .filter(isRecord)
-    .map((option, optionIndex) => ({
-      id: String(option.id ?? `${mealId}-option-${optionIndex + 1}`),
-      name: String(option.name ?? `Opción ${optionIndex + 1}`),
-      ingredients: Array.isArray(option.ingredients)
-        ? option.ingredients.map(normalizeIngredient).filter((ingredient) => ingredient.name.trim())
-        : [],
-    }))
-    .filter((option) => option.name.trim() && option.ingredients.length)
-}
+const normalizeIngredient = (value: Record<string, unknown>, index: number): Ingredient => ({
+  id: String(value.id ?? `ingredient-${index + 1}`),
+  name: String(value.name ?? 'Ingrediente'),
+  amount: String(value.amount ?? ''),
+})
 
 const normalizeMeals = (value: unknown): Meal[] => {
   if (!Array.isArray(value)) {
-    return initialState.meals
+    return cloneMeals(defaultMeals)
   }
 
-  const meals = value
-    .filter(isRecord)
-    .map((meal, mealIndex) => {
-      const id = String(meal.id ?? `meal-${mealIndex + 1}`)
-      const ingredients = Array.isArray(meal.ingredients)
-        ? meal.ingredients.map(normalizeIngredient).filter((ingredient) => ingredient.name.trim())
-        : []
-      const options = normalizeMealOptions(meal.options, id)
-
-      return {
-        id,
-        name: String(meal.name ?? `Comida ${mealIndex + 1}`),
-        slot: String(meal.slot ?? ''),
-        ingredients,
-        options: options.length ? options : undefined,
-      }
-    })
-    .filter((meal) => meal.name.trim() && (meal.ingredients.length || meal.options?.length))
-
-  return meals
+  return value.filter(isRecord).map((meal, mealIndex) => ({
+    id: String(meal.id ?? `meal-${mealIndex + 1}`),
+    name: String(meal.name ?? `Comida ${mealIndex + 1}`),
+    slot: String(meal.slot ?? ''),
+    ingredients: Array.isArray(meal.ingredients)
+      ? meal.ingredients.filter(isRecord).map(normalizeIngredient)
+      : [],
+    nutrition: normalizeNutrition(meal.nutrition, { calories: 0, protein: 0, carbs: 0, fat: 0 }),
+  }))
 }
 
-const normalizeCheckedIds = (value: unknown) => (Array.isArray(value) ? value.map(String).filter(Boolean) : [])
-
-const normalizeDateList = (value: unknown) =>
-  Array.isArray(value) ? [...new Set(value.map(String).filter(Boolean))].sort((a, b) => b.localeCompare(a)) : []
-
-const normalizeFoodLogs = (value: unknown): FoodLog[] => {
+const normalizeDateList = (value: unknown) => {
   if (!Array.isArray(value)) {
     return []
   }
 
-  return value
-    .filter(isRecord)
-    .map((log, index) => ({
-      id: String(log.id ?? `food-log-${index + 1}`),
-      date: String(log.date ?? new Date().toISOString().slice(0, 10)),
-      createdAt: String(log.createdAt ?? new Date().toISOString()),
-      barcode: String(log.barcode ?? ''),
-      name: String(log.name ?? 'Alimento'),
-      brand: String(log.brand ?? ''),
-      imageUrl: toImageUrl(log.imageUrl),
-      servingGrams: Math.max(1, toNumber(log.servingGrams, 100)),
-      grams: Math.max(1, toNumber(log.grams, 100)),
-      caloriesPer100g: Math.max(0, toNumber(log.caloriesPer100g)),
-      proteinPer100g: Math.max(0, toNumber(log.proteinPer100g)),
-      carbsPer100g: Math.max(0, toNumber(log.carbsPer100g)),
-      fatPer100g: Math.max(0, toNumber(log.fatPer100g)),
-      calories: Math.max(0, toNumber(log.calories)),
-      protein: Math.max(0, toNumber(log.protein)),
-      carbs: Math.max(0, toNumber(log.carbs)),
-      fat: Math.max(0, toNumber(log.fat)),
-    }))
-    .filter((log) => log.name.trim() && log.grams > 0)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  return [...new Set(value.filter((date): date is string => typeof date === 'string').map((date) => date.trim()).filter(Boolean))]
+    .sort((a, b) => b.localeCompare(a))
 }
 
-const normalizeActiveSession = (value: unknown): ActiveMealSession | undefined => {
-  if (!isRecord(value)) {
-    return undefined
-  }
-
-  return {
-    id: String(value.id ?? `active-${Date.now()}`),
-    mealId: String(value.mealId ?? ''),
-    optionId: value.optionId ? String(value.optionId) : undefined,
-    date: String(value.date ?? new Date().toISOString().slice(0, 10)),
-    startedAt: String(value.startedAt ?? new Date().toISOString()),
-    checkedIngredientIds: normalizeCheckedIds(value.checkedIngredientIds),
-  }
-}
+const normalizeCheckedIds = (value: unknown) =>
+  Array.isArray(value) ? [...new Set(value.map(String).filter(Boolean))] : []
 
 const normalizeSessions = (value: unknown): MealSession[] => {
   if (!Array.isArray(value)) {
     return []
   }
 
-  return value.filter(isRecord).map((session, index) => ({
-    id: String(session.id ?? `session-${index + 1}`),
-    mealId: String(session.mealId ?? ''),
-    optionId: session.optionId ? String(session.optionId) : undefined,
-    date: String(session.date ?? new Date().toISOString().slice(0, 10)),
-    startedAt: String(session.startedAt ?? new Date().toISOString()),
-    endedAt: String(session.endedAt ?? session.startedAt ?? new Date().toISOString()),
-    checkedIngredientIds: normalizeCheckedIds(session.checkedIngredientIds),
-    completed: Boolean(session.completed),
-  }))
+  return value.filter(isRecord).map((session, index) => {
+    const startedAt = String(session.startedAt ?? new Date().toISOString())
+
+    return {
+      id: String(session.id ?? `session-${index + 1}`),
+      mealId: String(session.mealId ?? ''),
+      date: String(session.date ?? new Date().toISOString().slice(0, 10)),
+      startedAt,
+      endedAt: String(session.endedAt ?? startedAt),
+      checkedIngredientIds: normalizeCheckedIds(session.checkedIngredientIds),
+      completed: Boolean(session.completed),
+    }
+  })
+}
+
+const getSessionTime = (session: MealSession) => {
+  const endedAt = new Date(session.endedAt).getTime()
+  const startedAt = new Date(session.startedAt).getTime()
+  return Number.isNaN(endedAt) ? (Number.isNaN(startedAt) ? 0 : startedAt) : endedAt
 }
 
 const normalizeMealSessions = (sessions: MealSession[], meals: Meal[]) => {
@@ -177,12 +112,9 @@ const normalizeMealSessions = (sessions: MealSession[], meals: Meal[]) => {
       return
     }
 
-    const option = getMealOption(meal, session.optionId)
-    const ingredientIds = new Set(option.ingredients.map((ingredient) => ingredient.id))
-
+    const ingredientIds = new Set(meal.ingredients.map((ingredient) => ingredient.id))
     const cleanedSession = {
       ...session,
-      optionId: option.id,
       checkedIngredientIds: session.checkedIngredientIds.filter((id) => ingredientIds.has(id)),
     }
     const key = `${cleanedSession.date}::${cleanedSession.mealId}`
@@ -193,56 +125,74 @@ const normalizeMealSessions = (sessions: MealSession[], meals: Meal[]) => {
     }
   })
 
-  return sortSessionsByRecency([...latestSessions.values()])
+  return [...latestSessions.values()].sort(
+    (a, b) => getSessionTime(b) - getSessionTime(a) || b.date.localeCompare(a.date),
+  )
 }
 
-const normalizeActiveMealSession = (activeSession: ActiveMealSession | undefined, meals: Meal[]) => {
-  if (!activeSession) {
-    return undefined
+export const requiresPlanMigration = (value: unknown) => {
+  if (!isRecord(value)) {
+    return true
   }
 
-  const meal = meals.find((item) => item.id === activeSession.mealId)
-  if (!meal) {
-    return undefined
-  }
-
-  const option = getMealOption(meal, activeSession.optionId)
-  const ingredientIds = new Set(option.ingredients.map((ingredient) => ingredient.id))
-
-  return {
-    ...activeSession,
-    optionId: option.id,
-    checkedIngredientIds: activeSession.checkedIngredientIds.filter((id) => ingredientIds.has(id)),
-  }
+  const version = Number(value.planVersion)
+  return !Number.isFinite(version) || version < CURRENT_PLAN_VERSION
 }
+
+export const hasLegacyStateKeys = (value: unknown) =>
+  isRecord(value) && ('foodLogs' in value || 'activeSession' in value)
 
 export const normalizeState = (value: unknown): AppState => {
   if (!isRecord(value)) {
-    return initialState
+    return freshInitialState()
+  }
+
+  const creatineDates = normalizeDateList(value.creatineDates)
+
+  if (requiresPlanMigration(value)) {
+    return freshInitialState(creatineDates)
   }
 
   const meals = normalizeMeals(value.meals)
-  const activeSession = normalizeActiveSession(value.activeSession)
+  const rawVersion = Math.trunc(Number(value.planVersion))
 
   return {
-    creatineDates: normalizeDateList(value.creatineDates),
-    foodLogs: normalizeFoodLogs(value.foodLogs),
+    planVersion: Math.max(CURRENT_PLAN_VERSION, rawVersion),
+    target: normalizeNutrition(value.target, defaultTarget),
+    notes: Array.isArray(value.notes)
+      ? value.notes.filter((note): note is string => typeof note === 'string')
+      : [...defaultNotes],
+    creatineDates,
     meals,
     sessions: normalizeMealSessions(normalizeSessions(value.sessions), meals),
-    activeSession: normalizeActiveMealSession(activeSession, meals),
-  }
-}
-
-export const loadState = (): AppState => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? normalizeState(JSON.parse(stored)) : initialState
-  } catch (error) {
-    console.error('Could not load Keep Slopping state', error)
-    return initialState
   }
 }
 
 export const saveState = (state: AppState) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+}
+
+export const loadState = (): AppState => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (!stored) {
+      return freshInitialState()
+    }
+
+    const value: unknown = JSON.parse(stored)
+    const state = normalizeState(value)
+
+    if (requiresPlanMigration(value) || hasLegacyStateKeys(value)) {
+      try {
+        saveState(state)
+      } catch (error) {
+        console.error('Could not persist migrated Keep Slopping state', error)
+      }
+    }
+
+    return state
+  } catch (error) {
+    console.error('Could not load Keep Slopping state', error)
+    return freshInitialState()
+  }
 }

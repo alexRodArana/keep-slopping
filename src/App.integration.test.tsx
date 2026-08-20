@@ -1,20 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FoodProduct } from './types'
+import { initialState } from './data'
 
-const { loadStateMock, product } = vi.hoisted(() => ({
-  loadStateMock: vi.fn(),
-  product: {
-    barcode: '7702001163885',
-    brand: 'Alpina',
-    caloriesPer100g: 116,
-    carbsPer100g: 6.8,
-    fatPer100g: 4.4,
-    name: 'Yogurt griego',
-    proteinPer100g: 12,
-    servingGrams: 150,
-  } satisfies FoodProduct,
-}))
+const { loadStateMock } = vi.hoisted(() => ({ loadStateMock: vi.fn() }))
 
 vi.mock('./storage', () => ({
   loadState: loadStateMock,
@@ -32,90 +20,55 @@ vi.mock('./supabase', () => ({
   signUpWithEmail: vi.fn(),
 }))
 
-vi.mock('./foodApi', async () => {
-  const actual = await vi.importActual<typeof import('./foodApi')>('./foodApi')
-  return {
-    ...actual,
-    getFoodByBarcode: vi.fn(async () => product),
-    searchFoods: vi.fn(async () => [product]),
-  }
-})
+const freshState = () => JSON.parse(JSON.stringify(initialState))
 
-describe('quick food logging', () => {
+describe('daily checklist', () => {
   beforeEach(() => {
-    loadStateMock.mockReturnValue({
-      activeSession: undefined,
-      creatineDates: [],
-      foodLogs: [],
-      meals: [],
-      sessions: [],
-    })
-  })
-
-  it('searches a product, adjusts the portion and logs calculated calories', async () => {
+    loadStateMock.mockReturnValue(freshState())
     window.localStorage.setItem('keep-slopping-theme', 'dark')
-    const { default: App } = await import('./App')
-
-    render(<App />)
-
-    expect(screen.queryByRole('button', { name: 'Buscar' })).toBeNull()
-    fireEvent.click(await screen.findByRole('button', { name: 'Alimentos' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Buscar' }))
-    const searchInput = screen.getByRole('searchbox', { name: 'Buscar alimento' })
-    fireEvent.change(searchInput, { target: { value: 'yogurt griego' } })
-    fireEvent.submit(searchInput.closest('form')!)
-
-    fireEvent.click(await screen.findByRole('button', { name: /Yogurt griego/i }))
-    const portionInput = screen.getByLabelText('Peso de la porcion')
-    fireEvent.change(portionInput, { target: { value: '200' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Registrar alimento' }))
-
-    expect(await screen.findByText('Registrado hoy')).toBeTruthy()
-    expect(screen.getAllByText('232 kcal').length).toBeGreaterThan(0)
-    expect(screen.getByText(/200 g/)).toBeTruthy()
   })
 
-  it('asks for an option and saves the selected recipe', async () => {
-    loadStateMock.mockReturnValue({
-      activeSession: undefined,
-      creatineDates: [],
-      foodLogs: [],
-      meals: [
-        {
-          id: 'breakfast',
-          name: 'Desayuno',
-          slot: 'Mañana',
-          ingredients: [{ id: 'shake-protein', name: 'Proteína', amount: '1 medida', calories: 120 }],
-          options: [
-            {
-              id: 'shake',
-              name: 'Licuado',
-              ingredients: [{ id: 'shake-protein', name: 'Proteína', amount: '1 medida', calories: 120 }],
-            },
-            {
-              id: 'omelette',
-              name: 'Omelette',
-              ingredients: [
-                { id: 'omelette-egg', name: 'Huevo', amount: '1 pieza', calories: 72 },
-                { id: 'omelette-whites', name: 'Claras', amount: '90 ml', calories: 47 },
-              ],
-            },
-          ],
-        },
-      ],
-      sessions: [],
-    })
+  it('shows only the daily checklist and plan editor tabs', async () => {
     const { default: App } = await import('./App')
-
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Elegir Omelette' }))
-    fireEvent.click(screen.getByRole('button', { name: /Huevo/ }))
-    fireEvent.click(screen.getByRole('button', { name: /Claras/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Terminar comida' }))
+    expect(await screen.findByRole('heading', { name: 'Checklist de hoy' })).toBeTruthy()
+    const navigation = screen.getByRole('navigation', { name: 'Navegación principal' })
+    expect(within(navigation).getAllByRole('button')).toHaveLength(2)
+    expect(within(navigation).getByRole('button', { name: 'Hoy' })).toBeTruthy()
+    expect(within(navigation).getByRole('button', { name: 'Plan' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Alimentos' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Calendario' })).toBeNull()
+    expect(screen.queryByText(/escanear/i)).toBeNull()
+  })
 
-    expect(await screen.findByText('Omelette')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Rehacer' })).toBeTruthy()
+  it('marks creatine, meals and individual ingredients directly', async () => {
+    const { default: App } = await import('./App')
+    render(<App />)
+
+    const creatine = await screen.findByRole('button', { name: /Creatina/ })
+    fireEvent.click(creatine)
+    expect(within(creatine).getByText('Hecho')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Completar Desayuno' }))
+    expect(screen.getByRole('button', { name: 'Marcar Desayuno como pendiente' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Desmarcar Avena de Desayuno' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Desmarcar Avena de Desayuno' }))
+    expect(screen.getByRole('button', { name: 'Completar Desayuno' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Marcar Avena de Desayuno' })).toBeTruthy()
+  })
+
+  it('edits the plan manually and reflects the change in the checklist', async () => {
+    const { default: App } = await import('./App')
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Plan' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Editar Desayuno' }))
+    fireEvent.change(screen.getByDisplayValue('Desayuno'), { target: { value: 'Primer comida' } })
+    expect(screen.queryByText(/buscar|escanear/i)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hoy' }))
+    expect(await screen.findByRole('heading', { name: 'Primer comida' })).toBeTruthy()
   })
 })

@@ -1,23 +1,18 @@
 # Keep Slopping
 
-Aplicacion PWA mobile-first para seguir un plan alimenticio y registrar calorias con la misma cuenta de The Goy Project.
+Aplicación PWA mobile-first para seguir el plan alimenticio diario de Alejandro con la misma cuenta de The Goy Project.
 
 ## Features
 
-- Plan diario editable con comidas, ingredientes, cantidades y calorias.
-- Varias opciones por comida con seleccion al iniciar y progreso independiente.
-- Tab dedicada para registrar alimentos mediante busqueda o escaneo de codigo de barras.
-- Calculo automatico de calorias y macronutrientes segun los gramos de la porcion.
-- Modo de enfoque para iniciar una comida y marcar sus ingredientes.
-- Progreso persistente sin duplicar una comida al rehacerla el mismo dia.
-- Calendario de cumplimiento, recordatorio de creatina y totales diarios.
-- Tema claro/oscuro, acentos configurables, PWA movil y sincronizacion con Supabase.
-
-Los datos nutricionales provienen de [Open Food Facts](https://world.openfoodfacts.org/) y deben verificarse contra la etiqueta del producto. El escaner usa [`@zxing/browser`](https://github.com/zxing-js/browser) y se carga bajo demanda para no aumentar la descarga inicial.
+- Checklist diario de comidas, ingredientes y creatina.
+- Plan de 2,600 kcal con cantidades y macronutrientes por comida.
+- Edición manual de comidas, ingredientes, objetivos e indicaciones.
+- Progreso persistente por día.
+- Tema claro/oscuro, acentos configurables, PWA móvil y sincronización con Supabase.
 
 ## Supabase
 
-Keep Slopping usa el mismo proyecto de Supabase y las mismas cuentas que The Goy Project. Los datos se guardan bajo la clave `keepSlopping`; las funciones atomicas de Postgres leen y actualizan solo esa seccion para evitar consultas redundantes y conflictos con el historial de entrenamiento.
+Keep Slopping usa el mismo proyecto de Supabase y las mismas cuentas que The Goy Project. Los datos se guardan bajo la clave `keepSlopping`; las funciones atómicas de Postgres leen y actualizan solo esa sección para evitar consultas redundantes y conflictos con el historial de entrenamiento.
 
 Required environment variables:
 

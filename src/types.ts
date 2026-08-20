@@ -1,4 +1,4 @@
-export type TabKey = 'today' | 'food' | 'calendar' | 'plan'
+export type TabKey = 'today' | 'plan'
 
 export type ThemeMode = 'dark' | 'light'
 
@@ -8,71 +8,40 @@ export type Ingredient = {
   id: string
   name: string
   amount: string
-  calories: number
-  barcode?: string
-  imageUrl?: string
-  grams?: number
-  caloriesPer100g?: number
-  proteinPer100g?: number
-  carbsPer100g?: number
-  fatPer100g?: number
 }
 
-export type MealOption = {
-  id: string
-  name: string
-  ingredients: Ingredient[]
-}
-
-export type FoodProduct = {
-  barcode: string
-  name: string
-  brand: string
-  imageUrl?: string
-  servingGrams: number
-  caloriesPer100g: number
-  proteinPer100g: number
-  carbsPer100g: number
-  fatPer100g: number
-}
-
-export type FoodLog = FoodProduct & {
-  id: string
-  date: string
-  grams: number
+export type Nutrition = {
   calories: number
   protein: number
   carbs: number
   fat: number
-  createdAt: string
 }
+
+export type PlanTarget = Nutrition
 
 export type Meal = {
   id: string
   name: string
   slot: string
   ingredients: Ingredient[]
-  options?: MealOption[]
+  nutrition: Nutrition
 }
 
-export type ActiveMealSession = {
+export type MealSession = {
   id: string
   mealId: string
-  optionId?: string
   date: string
   startedAt: string
-  checkedIngredientIds: string[]
-}
-
-export type MealSession = ActiveMealSession & {
   endedAt: string
+  checkedIngredientIds: string[]
   completed: boolean
 }
 
 export type AppState = {
+  planVersion: number
+  target: PlanTarget
+  notes: string[]
   creatineDates: string[]
-  foodLogs: FoodLog[]
   meals: Meal[]
   sessions: MealSession[]
-  activeSession?: ActiveMealSession
 }

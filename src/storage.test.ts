@@ -1,27 +1,80 @@
-import { describe, expect, it } from 'vitest'
-import { normalizeState } from './storage'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { defaultMeals, defaultNotes, defaultTarget } from './data'
+import { loadState, normalizeState, requiresPlanMigration } from './storage'
+
+const STORAGE_KEY = 'keep-slopping-state-v1'
 
 describe('state migration', () => {
-  it('loads legacy states without food logs and preserves an intentionally empty plan', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('replaces a legacy plan, clears its sessions, and preserves normalized creatine dates', () => {
+    const legacyState = {
+      planVersion: 1,
+      target: { calories: 1, protein: 1, carbs: 1, fat: 1 },
+      notes: ['Nota anterior'],
+      creatineDates: ['2026-08-04', '2026-08-06', '2026-08-04', ''],
+      meals: [{ id: 'old', name: 'Plan anterior', slot: '', ingredients: [] }],
+      sessions: [{ id: 'old-session', mealId: 'old' }],
+      foodLogs: [{ id: 'old-food-log' }],
+      activeSession: { id: 'old-active-session' },
+    }
+
+    expect(requiresPlanMigration(legacyState)).toBe(true)
+    expect(normalizeState(legacyState)).toEqual({
+      planVersion: 2,
+      target: defaultTarget,
+      notes: defaultNotes,
+      creatineDates: ['2026-08-06', '2026-08-04'],
+      meals: defaultMeals,
+      sessions: [],
+    })
+  })
+
+  it('treats states without a plan version as legacy', () => {
+    expect(normalizeState({ creatineDates: ['2026-08-04'], meals: [] })).toMatchObject({
+      planVersion: 2,
+      creatineDates: ['2026-08-04'],
+      meals: defaultMeals,
+      sessions: [],
+    })
+  })
+
+  it('preserves edits and an intentionally empty meal list in version 2', () => {
     const state = normalizeState({
+      planVersion: 2,
+      target: { calories: 2500, protein: 150, carbs: 300, fat: 70 },
+      notes: [],
       creatineDates: [],
       meals: [],
       sessions: [],
     })
 
-    expect(state.foodLogs).toEqual([])
-    expect(state.meals).toEqual([])
+    expect(requiresPlanMigration(state)).toBe(false)
+    expect(state).toEqual({
+      planVersion: 2,
+      target: { calories: 2500, protein: 150, carbs: 300, fat: 70 },
+      notes: [],
+      creatineDates: [],
+      meals: [],
+      sessions: [],
+    })
   })
 
-  it('assigns a stable default option to legacy sessions', () => {
+  it('normalizes version 2 sessions against their meal ingredients', () => {
     const state = normalizeState({
+      planVersion: 2,
+      target: defaultTarget,
+      notes: defaultNotes,
       creatineDates: [],
       meals: [
         {
           id: 'breakfast',
           name: 'Desayuno',
-          slot: 'Mañana',
-          ingredients: [{ id: 'egg', name: 'Huevo', amount: '1', calories: 72 }],
+          slot: 'ligero',
+          ingredients: [{ id: 'oats', name: 'Avena', amount: '50 g', calories: 999 }],
+          nutrition: { calories: 493, protein: 40, carbs: 67, fat: 7 },
         },
       ],
       sessions: [
@@ -31,54 +84,84 @@ describe('state migration', () => {
           date: '2026-08-04',
           startedAt: '2026-08-04T08:00:00.000Z',
           endedAt: '2026-08-04T08:10:00.000Z',
-          checkedIngredientIds: ['egg'],
+          checkedIngredientIds: ['oats', 'removed-product'],
           completed: true,
+          optionId: 'removed-option',
         },
       ],
     })
 
-    expect(state.meals[0].options).toBeUndefined()
-    expect(state.sessions[0]).toMatchObject({ optionId: 'breakfast-default', checkedIngredientIds: ['egg'] })
+    expect(state.meals[0].ingredients[0]).toEqual({ id: 'oats', name: 'Avena', amount: '50 g' })
+    expect(state.sessions[0]).toEqual({
+      id: 'session-1',
+      mealId: 'breakfast',
+      date: '2026-08-04',
+      startedAt: '2026-08-04T08:00:00.000Z',
+      endedAt: '2026-08-04T08:10:00.000Z',
+      checkedIngredientIds: ['oats'],
+      completed: true,
+    })
   })
 
-  it('keeps only ingredients from the selected meal option', () => {
-    const state = normalizeState({
-      creatineDates: [],
-      meals: [
-        {
-          id: 'breakfast',
-          name: 'Desayuno',
-          slot: 'Mañana',
-          ingredients: [{ id: 'shake-protein', name: 'Proteína', amount: '1 medida', calories: 120 }],
-          options: [
-            {
-              id: 'shake',
-              name: 'Licuado',
-              ingredients: [{ id: 'shake-protein', name: 'Proteína', amount: '1 medida', calories: 120 }],
-            },
-            {
-              id: 'omelette',
-              name: 'Omelette',
-              ingredients: [{ id: 'omelette-egg', name: 'Huevo', amount: '1', calories: 72 }],
-            },
-          ],
-        },
-      ],
-      sessions: [
-        {
-          id: 'session-1',
-          mealId: 'breakfast',
-          optionId: 'omelette',
-          date: '2026-08-04',
-          startedAt: '2026-08-04T08:00:00.000Z',
-          endedAt: '2026-08-04T08:10:00.000Z',
-          checkedIngredientIds: ['shake-protein', 'omelette-egg'],
-          completed: true,
-        },
-      ],
+  it('writes a migrated local state back immediately', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        creatineDates: ['2026-08-04'],
+        foodLogs: [{ id: 'legacy-log' }],
+        meals: [],
+        sessions: [{ id: 'legacy-session' }],
+        activeSession: { id: 'legacy-active' },
+      }),
+    )
+
+    const state = loadState()
+    const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+
+    expect(state.planVersion).toBe(2)
+    expect(persisted).toEqual(state)
+    expect(persisted).not.toHaveProperty('foodLogs')
+    expect(persisted).not.toHaveProperty('activeSession')
+  })
+
+  it('cleans legacy keys from a version 2 state without replacing its edits', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        planVersion: 2,
+        target: { calories: 2500, protein: 150, carbs: 300, fat: 70 },
+        notes: [],
+        creatineDates: [],
+        meals: [],
+        sessions: [],
+        foodLogs: [],
+        activeSession: null,
+      }),
+    )
+
+    const state = loadState()
+    const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+
+    expect(state).toMatchObject({ target: { calories: 2500 }, notes: [], meals: [] })
+    expect(persisted).toEqual(state)
+  })
+
+  it('keeps the migrated state in memory when local writeback fails', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ creatineDates: ['2026-08-04'], meals: [], sessions: [] }),
+    )
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const storageSpy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('Storage unavailable')
     })
 
-    expect(state.meals[0].options).toHaveLength(2)
-    expect(state.sessions[0]).toMatchObject({ optionId: 'omelette', checkedIngredientIds: ['omelette-egg'] })
+    const state = loadState()
+
+    expect(state.creatineDates).toEqual(['2026-08-04'])
+    expect(state.meals).toEqual(defaultMeals)
+    expect(consoleSpy).toHaveBeenCalledOnce()
+    storageSpy.mockRestore()
+    consoleSpy.mockRestore()
   })
 })

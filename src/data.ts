@@ -1,55 +1,77 @@
-import type { AppState, Meal } from './types'
+import type { AppState, Meal, PlanTarget } from './types'
 
-const defaultMeals: Meal[] = [
+export const CURRENT_PLAN_VERSION = 2
+
+export const defaultTarget: PlanTarget = {
+  calories: 2600,
+  protein: 140,
+  carbs: 375,
+  fat: 60,
+}
+
+export const defaultNotes = [
+  'Los valores son aproximados y pueden variar según la marca de whey, leche, pan, hummus, pasta y crema de cacahuate.',
+  'La pasta se pesa en seco y la pechuga de pollo en crudo para mantener consistencia.',
+  'Las verduras pueden ser la mezcla de brócoli, coliflor y zanahoria que ya tienes.',
+  'La distribución está pensada para que el desayuno sea la comida más ligera y la cena la más abundante.',
+]
+
+export const defaultMeals: Meal[] = [
   {
     id: 'breakfast',
     name: 'Desayuno',
-    slot: 'Mañana',
+    slot: 'ligero',
     ingredients: [
-      { id: 'breakfast-eggs', name: 'Huevos enteros', amount: '2 piezas', calories: 144 },
-      { id: 'breakfast-whites', name: 'Claras de huevo', amount: '210 g', calories: 109 },
-      { id: 'breakfast-almond-milk', name: 'Leche de almendras', amount: '60 g', calories: 8 },
-      { id: 'breakfast-vanilla-stevia', name: 'Vainilla + stevia', amount: 'al gusto', calories: 0 },
-      { id: 'breakfast-oats', name: 'Avena', amount: '40 g', calories: 156 },
-      { id: 'breakfast-banana', name: 'Platano', amount: '1 pieza', calories: 105 },
-      { id: 'breakfast-almonds', name: 'Almendras', amount: '12 piezas', calories: 84 },
+      { id: 'breakfast-oats', name: 'Avena', amount: '50 g' },
+      { id: 'breakfast-whey', name: 'Proteína whey', amount: '1 scoop' },
+      { id: 'breakfast-milk', name: 'Leche', amount: '250 ml' },
+      { id: 'breakfast-blueberries', name: 'Blueberries', amount: '100 g' },
+      { id: 'breakfast-lys-syrup', name: 'Lys syrup', amount: '10 g' },
+      { id: 'breakfast-sweetener', name: 'Edulcorante', amount: 'al gusto' },
     ],
+    nutrition: { calories: 493, protein: 40, carbs: 67, fat: 7 },
   },
   {
     id: 'lunch',
-    name: 'Almuerzo',
-    slot: 'Mediodia',
+    name: 'Comida',
+    slot: 'moderada',
     ingredients: [
-      { id: 'lunch-chicken', name: 'Pechuga de pollo', amount: '200 g cocida', calories: 330 },
-      { id: 'lunch-potato', name: 'Papa cocida', amount: '150 g', calories: 130 },
-      { id: 'lunch-broccoli', name: 'Brocoli', amount: '250 g', calories: 85 },
+      { id: 'lunch-pasta', name: 'Pasta (peso en seco)', amount: '100 g' },
+      { id: 'lunch-chicken', name: 'Pechuga de pollo (peso en crudo)', amount: '80 g' },
+      { id: 'lunch-vegetables', name: 'Verduras congeladas', amount: '200 g' },
+      { id: 'lunch-hummus', name: 'Hummus', amount: '40 g' },
     ],
+    nutrition: { calories: 604, protein: 37, carbs: 90, fat: 11 },
   },
   {
     id: 'snack',
-    name: 'Colacion',
-    slot: 'Tarde',
+    name: 'Colación',
+    slot: '',
     ingredients: [
-      { id: 'snack-yogurt', name: 'Yogurt griego sin azucar', amount: '200 g', calories: 118 },
-      { id: 'snack-blueberries', name: 'Blueberries', amount: '60 g', calories: 34 },
+      { id: 'snack-bread', name: 'Pan multigrain', amount: '130 g' },
+      { id: 'snack-peanut-butter', name: 'Crema de cacahuate', amount: '30 g' },
     ],
+    nutrition: { calories: 501, protein: 21, carbs: 65, fat: 20 },
   },
   {
     id: 'dinner',
     name: 'Cena',
-    slot: 'Noche',
+    slot: 'comida fuerte',
     ingredients: [
-      { id: 'dinner-chicken', name: 'Pechuga de pollo', amount: '280 g cocida', calories: 462 },
-      { id: 'dinner-potato', name: 'Papa cocida', amount: '350 g', calories: 305 },
-      { id: 'dinner-avocado', name: 'Aguacate', amount: '35 g', calories: 56 },
-      { id: 'dinner-broccoli', name: 'Brocoli', amount: '250 g', calories: 85 },
+      { id: 'dinner-pasta', name: 'Pasta (peso en seco)', amount: '175 g' },
+      { id: 'dinner-chicken', name: 'Pechuga de pollo (peso en crudo)', amount: '45 g' },
+      { id: 'dinner-vegetables', name: 'Verduras congeladas', amount: '250 g' },
+      { id: 'dinner-hummus', name: 'Hummus', amount: '100 g' },
     ],
+    nutrition: { calories: 990, protein: 43, carbs: 155, fat: 22 },
   },
 ]
 
 export const initialState: AppState = {
+  planVersion: CURRENT_PLAN_VERSION,
+  target: defaultTarget,
+  notes: defaultNotes,
   creatineDates: [],
-  foodLogs: [],
   meals: defaultMeals,
   sessions: [],
 }

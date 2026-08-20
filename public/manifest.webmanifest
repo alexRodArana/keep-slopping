@@ -1,7 +1,7 @@
 {
   "name": "Keep Slopping",
   "short_name": "Keep Slopping",
-  "description": "Registra comidas y calorias buscando alimentos o escaneando su codigo de barras.",
+  "description": "Checklist diario de comidas, ingredientes y creatina para el plan alimenticio de Alejandro.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

@@ -1,32 +1,21 @@
 import {
-  Apple,
-  ArrowLeft,
-  CalendarDays,
   Check,
   CheckCircle2,
   ChefHat,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ChevronUp,
   Circle,
   Cloud,
-  Clock3,
   Flame,
-  LoaderCircle,
+  ListChecks,
   Mail,
   Moon,
   Palette,
-  Play,
   Plus,
-  Save,
-  ScanBarcode,
-  Search,
   Settings2,
   Sun,
   Trash2,
   Utensils,
-  X,
 } from 'lucide-react'
 import {
   type CSSProperties,
@@ -40,25 +29,17 @@ import {
   useRef,
   useState,
 } from 'react'
-import { initialState } from './data'
 import './App.css'
+import { initialState } from './data'
 import {
-  addMonths,
-  buildCalendarDays,
-  buildDaySummaries,
   formatDate,
-  formatDuration,
-  formatMonth,
   formatNumber,
-  getDaySummary,
   getLatestMealSession,
   isMealSessionComplete,
-  sessionCalories,
   todayIso,
   upsertMealSession,
 } from './domain'
-import { calculateNutrition, getFoodByBarcode, normalizeBarcode, searchFoods } from './foodApi'
-import { dayCalorieRange, getMealOption, getMealOptions, mealCalorieRange, optionCalories } from './mealUtils'
+import { sumNutrition } from './mealUtils'
 import { loadState, saveState } from './storage'
 import {
   getSession,
@@ -71,31 +52,7 @@ import {
   signUpWithEmail,
   type SyncSession,
 } from './supabase'
-import type {
-  AccentColor,
-  ActiveMealSession,
-  AppState,
-  FoodLog,
-  FoodProduct,
-  Ingredient,
-  Meal,
-  MealOption,
-  MealSession,
-  TabKey,
-  ThemeMode,
-} from './types'
-
-type FoodFinderMode = 'search' | 'scan'
-
-type FoodFinderRequest = {
-  target: 'log' | 'meal'
-  initialMode: FoodFinderMode
-  mealId?: string
-  optionId?: string
-  editingLogId?: string
-  initialProduct?: FoodProduct
-  initialGrams?: number
-}
+import type { AccentColor, AppState, Ingredient, Meal, MealSession, Nutrition, TabKey, ThemeMode } from './types'
 
 type AccentOption = {
   key: AccentColor
@@ -111,18 +68,11 @@ const accentOptions: AccentOption[] = [
   { key: 'rose', label: 'Rosa', color: '#be185d' },
 ]
 
-const foodPhrases = [
-  'Goy mode off. Meal prep Kosher.',
-  'Plan Judio: pesar, cocinar, cumplir.',
-  'Slopping Kosher, calorias bajo control.',
-  'Del antojo Goy al plato medido.',
-  'Cocina Kosher. Progreso limpio.',
-  'Que el Goy interior respete el plan.',
-  'Hoy toca precision Kosher en la cocina.',
-  'Comida medida, disciplina Judia.',
-]
-
-const defaultMealsSignature = JSON.stringify(initialState.meals)
+const defaultPlanSignature = JSON.stringify({
+  target: initialState.target,
+  notes: initialState.notes,
+  meals: initialState.meals,
+})
 
 const createId = (prefix: string) => `${prefix}-${crypto.randomUUID()}`
 
@@ -131,9 +81,6 @@ const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeou
 const updateMetaContent = (selector: string, content: string) => {
   document.querySelector(selector)?.setAttribute('content', content)
 }
-
-const formatCalorieRange = ({ min, max }: { min: number; max: number }) =>
-  min === max ? `${formatNumber(min)} kcal` : `${formatNumber(min)}-${formatNumber(max)} kcal`
 
 const vibrate = (duration = 8) => {
   if ('vibrate' in navigator) {
@@ -144,45 +91,11 @@ const vibrate = (duration = 8) => {
 const hasUserData = (value: AppState) =>
   Boolean(
     value.creatineDates.length ||
-      value.foodLogs.length ||
       value.sessions.length ||
-      value.activeSession ||
-      JSON.stringify(value.meals) !== defaultMealsSignature,
+      JSON.stringify({ target: value.target, notes: value.notes, meals: value.meals }) !== defaultPlanSignature,
   )
 
 const getMeal = (meals: Meal[], mealId: string) => meals.find((meal) => meal.id === mealId)
-
-const updateOptionIngredients = (
-  meal: Meal,
-  optionId: string | undefined,
-  update: (ingredients: Ingredient[]) => Ingredient[],
-): Meal => {
-  if (!meal.options?.length) {
-    return { ...meal, ingredients: update(meal.ingredients) }
-  }
-
-  const targetOption = getMealOption(meal, optionId)
-  const nextIngredients = update(targetOption.ingredients)
-  return {
-    ...meal,
-    ingredients: meal.options[0].id === targetOption.id ? nextIngredients : meal.ingredients,
-    options: meal.options.map((option) =>
-      option.id === targetOption.id ? { ...option, ingredients: nextIngredients } : option,
-    ),
-  }
-}
-
-const foodLogToProduct = (log: FoodLog): FoodProduct => ({
-  barcode: log.barcode,
-  name: log.name,
-  brand: log.brand,
-  imageUrl: log.imageUrl,
-  servingGrams: log.servingGrams,
-  caloriesPer100g: log.caloriesPer100g,
-  proteinPer100g: log.proteinPer100g,
-  carbsPer100g: log.carbsPer100g,
-  fatPer100g: log.fatPer100g,
-})
 
 function App() {
   const [state, setState] = useState<AppState>(initialState)
@@ -211,18 +124,10 @@ function App() {
     return accentOptions.some((option) => option.key === storedAccent) ? (storedAccent as AccentColor) : 'green'
   })
   const [accentOpen, setAccentOpen] = useState(false)
-  const [foodPhraseIndex, setFoodPhraseIndex] = useState(() => Math.floor(Math.random() * foodPhrases.length))
-  const [foodFinderRequest, setFoodFinderRequest] = useState<FoodFinderRequest | null>(null)
-  const [optionPickerMealId, setOptionPickerMealId] = useState<string | null>(null)
 
   const today = todayIso()
-  const mealsById = useMemo(() => new Map(state.meals.map((meal) => [meal.id, meal])), [state.meals])
-  const todayFoodLogs = useMemo(() => state.foodLogs.filter((foodLog) => foodLog.date === today), [state.foodLogs, today])
-  const activeMeal = state.activeSession ? mealsById.get(state.activeSession.mealId) : undefined
-  const optionPickerMeal = optionPickerMealId ? mealsById.get(optionPickerMealId) : undefined
   const currentAccent = accentOptions.find((option) => option.key === accent) ?? accentOptions[0]
-  const currentFoodPhrase = foodPhrases[foodPhraseIndex]
-  const totalCalories = useMemo(() => dayCalorieRange(state.meals), [state.meals])
+  const dailyNutrition = useMemo(() => sumNutrition(state.meals), [state.meals])
 
   const applyLoadedState = useCallback((savedState: AppState) => {
     stateRef.current = savedState
@@ -321,7 +226,7 @@ function App() {
       }
     }
 
-    loadInitialState()
+    void loadInitialState()
 
     const unsubscribe = onAuthChange(async (nextSession) => {
       if (!initialAuthHandledRef.current) {
@@ -436,7 +341,10 @@ function App() {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('keep-slopping-theme', theme)
     updateMetaContent('meta[name="theme-color"]', theme === 'dark' ? '#0d0f12' : '#f5f6f8')
-    updateMetaContent('meta[name="apple-mobile-web-app-status-bar-style"]', theme === 'dark' ? 'black-translucent' : 'default')
+    updateMetaContent(
+      'meta[name="apple-mobile-web-app-status-bar-style"]',
+      theme === 'dark' ? 'black-translucent' : 'default',
+    )
   }, [theme])
 
   useEffect(() => {
@@ -452,18 +360,6 @@ function App() {
     const interval = window.setInterval(() => setSyncCooldown((seconds) => Math.max(0, seconds - 1)), 1000)
     return () => window.clearInterval(interval)
   }, [syncCooldown])
-
-  useEffect(() => {
-    if (state.activeSession || foodFinderRequest || optionPickerMeal) {
-      return
-    }
-
-    const interval = window.setInterval(() => {
-      setFoodPhraseIndex((index) => (index + 1) % foodPhrases.length)
-    }, 5200)
-
-    return () => window.clearInterval(interval)
-  }, [foodFinderRequest, optionPickerMeal, state.activeSession])
 
   const requestSyncLink = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -517,110 +413,65 @@ function App() {
     setSyncPassword('')
   }
 
-  const beginMeal = (mealId: string, optionId: string) => {
-    vibrate(10)
+  const updateTodaySession = (mealId: string, nextCheckedIds: (current: string[], meal: Meal) => string[]) => {
+    vibrate(8)
     setState((current) => {
       const meal = getMeal(current.meals, mealId)
       if (!meal) {
         return current
       }
 
-      const option = getMealOption(meal, optionId)
       const date = todayIso()
-      const previousSession = getLatestMealSession(current.sessions, mealId, date)
-      const canResume = previousSession && getMealOption(meal, previousSession.optionId).id === option.id
-
-      return {
-        ...current,
-        activeSession: {
-          id: previousSession?.id ?? createId('meal-session'),
-          mealId,
-          optionId: option.id,
-          date,
-          startedAt: new Date().toISOString(),
-          checkedIngredientIds: canResume ? previousSession.checkedIngredientIds : [],
-        },
+      const previous = getLatestMealSession(current.sessions, mealId, date)
+      const validIds = new Set(meal.ingredients.map((ingredient) => ingredient.id))
+      const checkedIngredientIds = [
+        ...new Set(nextCheckedIds(previous?.checkedIngredientIds ?? [], meal).filter((id) => validIds.has(id))),
+      ]
+      const timestamp = new Date().toISOString()
+      const nextSession: MealSession = {
+        id: previous?.id ?? createId('meal-session'),
+        mealId,
+        date,
+        startedAt: previous?.startedAt ?? timestamp,
+        endedAt: timestamp,
+        checkedIngredientIds,
+        completed:
+          meal.ingredients.length > 0 && meal.ingredients.every((ingredient) => checkedIngredientIds.includes(ingredient.id)),
       }
+
+      return { ...current, sessions: upsertMealSession(current.sessions, nextSession) }
     })
-    setOptionPickerMealId(null)
-    setActiveTab('today')
   }
 
-  const startMeal = (mealId: string) => {
-    const meal = getMeal(state.meals, mealId)
-    if (!meal) {
-      return
-    }
-
-    const options = getMealOptions(meal)
-    if (options.length > 1) {
-      vibrate(8)
-      setAccentOpen(false)
-      setOptionPickerMealId(mealId)
-      return
-    }
-
-    beginMeal(mealId, options[0].id)
+  const toggleIngredient = (mealId: string, ingredientId: string) => {
+    updateTodaySession(mealId, (checkedIds) =>
+      checkedIds.includes(ingredientId)
+        ? checkedIds.filter((id) => id !== ingredientId)
+        : [...checkedIds, ingredientId],
+    )
   }
 
-  const toggleIngredient = (ingredientId: string) => {
-    vibrate(6)
+  const toggleMeal = (mealId: string) => {
+    updateTodaySession(mealId, (checkedIds, meal) => {
+      const complete = meal.ingredients.length > 0 && meal.ingredients.every((ingredient) => checkedIds.includes(ingredient.id))
+      return complete ? [] : meal.ingredients.map((ingredient) => ingredient.id)
+    })
+  }
+
+  const toggleCreatine = () => {
+    const date = todayIso()
+    vibrate(10)
     setState((current) => {
-      if (!current.activeSession) {
-        return current
-      }
-
-      const checked = current.activeSession.checkedIngredientIds.includes(ingredientId)
-
+      const completed = current.creatineDates.includes(date)
       return {
         ...current,
-        activeSession: {
-          ...current.activeSession,
-          checkedIngredientIds: checked
-            ? current.activeSession.checkedIngredientIds.filter((id) => id !== ingredientId)
-            : [...current.activeSession.checkedIngredientIds, ingredientId],
-        },
+        creatineDates: completed ? current.creatineDates.filter((item) => item !== date) : [date, ...current.creatineDates],
       }
     })
   }
 
-  const cancelActiveMeal = () => {
-    vibrate(12)
-    setState((current) => ({ ...current, activeSession: undefined }))
-  }
-
-  const finishMeal = () => {
-    if (!state.activeSession || !activeMeal) {
-      return
-    }
-
-    vibrate(18)
-    setState((current) => {
-      if (!current.activeSession) {
-        return current
-      }
-
-      const meal = getMeal(current.meals, current.activeSession.mealId)
-      if (!meal) {
-        return {
-          ...current,
-          activeSession: undefined,
-        }
-      }
-
-      const completed = isMealSessionComplete(current.activeSession, meal)
-      const session: MealSession = {
-        ...current.activeSession,
-        endedAt: new Date().toISOString(),
-        completed,
-      }
-
-      return {
-        ...current,
-        activeSession: undefined,
-        sessions: upsertMealSession(current.sessions, session),
-      }
-    })
+  const updateTarget = (patch: Partial<Nutrition>) => {
+    setState((current) => ({ ...current, target: { ...current.target, ...patch } }))
   }
 
   const updateMeal = (mealId: string, patch: Partial<Meal>) => {
@@ -630,314 +481,153 @@ function App() {
     }))
   }
 
-  const updateIngredient = (mealId: string, optionId: string | undefined, ingredientId: string, patch: Partial<Ingredient>) => {
+  const updateMealNutrition = (mealId: string, patch: Partial<Nutrition>) => {
     setState((current) => ({
       ...current,
       meals: current.meals.map((meal) =>
-        meal.id === mealId
-          ? updateOptionIngredients(meal, optionId, (ingredients) =>
-              ingredients.map((ingredient) =>
-                ingredient.id === ingredientId ? { ...ingredient, ...patch } : ingredient,
-              ),
-            )
-          : meal,
+        meal.id === mealId ? { ...meal, nutrition: { ...meal.nutrition, ...patch } } : meal,
       ),
     }))
   }
 
-  const updateMealOption = (mealId: string, optionId: string, patch: Partial<MealOption>) => {
+  const updateIngredient = (mealId: string, ingredientId: string, patch: Partial<Ingredient>) => {
     setState((current) => ({
       ...current,
       meals: current.meals.map((meal) =>
-        meal.id === mealId && meal.options?.length
-          ? { ...meal, options: meal.options.map((option) => (option.id === optionId ? { ...option, ...patch } : option)) }
+        meal.id === mealId
+          ? {
+              ...meal,
+              ingredients: meal.ingredients.map((ingredient) =>
+                ingredient.id === ingredientId ? { ...ingredient, ...patch } : ingredient,
+              ),
+            }
           : meal,
       ),
     }))
   }
 
   const addMeal = () => {
+    const id = createId('meal')
     vibrate(10)
-    const mealId = createId('meal')
     setState((current) => ({
       ...current,
       meals: [
         ...current.meals,
         {
-          id: mealId,
+          id,
           name: 'Nueva comida',
           slot: '',
-          ingredients: [{ id: createId('ingredient'), name: 'Ingrediente', amount: '', calories: 0 }],
+          ingredients: [{ id: createId('ingredient'), name: 'Ingrediente', amount: '' }],
+          nutrition: { calories: 0, protein: 0, carbs: 0, fat: 0 },
         },
       ],
     }))
-    setActiveTab('plan')
-    return mealId
+    return id
   }
 
   const deleteMeal = (mealId: string) => {
-    vibrate(14)
-    setState((current) => ({
-      ...current,
-      activeSession: current.activeSession?.mealId === mealId ? undefined : current.activeSession,
-      meals: current.meals.filter((meal) => meal.id !== mealId),
-      sessions: current.sessions.filter((session) => session.mealId !== mealId),
-    }))
-  }
-
-  const addMealOption = (mealId: string) => {
-    const optionId = createId('meal-option')
-    setState((current) => ({
-      ...current,
-      meals: current.meals.map((meal) => {
-        if (meal.id !== mealId) {
-          return meal
-        }
-
-        const existingOptions = meal.options?.length
-          ? meal.options
-          : [{ id: `${meal.id}-option-1`, name: meal.name, ingredients: meal.ingredients }]
-
-        return {
-          ...meal,
-          ingredients: existingOptions[0].ingredients,
-          options: [
-            ...existingOptions,
-            {
-              id: optionId,
-              name: 'Nueva opción',
-              ingredients: [{ id: createId('ingredient'), name: 'Ingrediente', amount: '', calories: 0 }],
-            },
-          ],
-        }
-      }),
-    }))
-    vibrate(8)
-    return optionId
-  }
-
-  const deleteMealOption = (mealId: string, optionId: string) => {
-    vibrate(10)
-    setState((current) => ({
-      ...current,
-      activeSession:
-        current.activeSession?.mealId === mealId && current.activeSession.optionId === optionId
-          ? undefined
-          : current.activeSession,
-      meals: current.meals.map((meal) => {
-        if (meal.id !== mealId || !meal.options || meal.options.length <= 1) {
-          return meal
-        }
-
-        const options = meal.options.filter((option) => option.id !== optionId)
-        return { ...meal, ingredients: options[0].ingredients, options }
-      }),
-      sessions: current.sessions.filter((session) => !(session.mealId === mealId && session.optionId === optionId)),
-    }))
-  }
-
-  const addIngredient = (mealId: string, optionId?: string) => {
-    vibrate(8)
-    setState((current) => ({
-      ...current,
-      meals: current.meals.map((meal) =>
-        meal.id === mealId
-          ? updateOptionIngredients(meal, optionId, (ingredients) => [
-              ...ingredients,
-              { id: createId('ingredient'), name: 'Ingrediente', amount: '', calories: 0 },
-            ])
-          : meal,
-      ),
-    }))
-  }
-
-  const deleteIngredient = (mealId: string, optionId: string | undefined, ingredientId: string) => {
-    vibrate(10)
-    setState((current) => ({
-      ...current,
-      activeSession:
-        current.activeSession?.mealId === mealId
-          ? {
-              ...current.activeSession,
-              checkedIngredientIds: current.activeSession.checkedIngredientIds.filter((id) => id !== ingredientId),
-            }
-          : current.activeSession,
-      meals: current.meals.map((meal) =>
-        meal.id === mealId
-          ? updateOptionIngredients(meal, optionId, (ingredients) =>
-              ingredients.length > 1 ? ingredients.filter((ingredient) => ingredient.id !== ingredientId) : ingredients,
-            )
-          : meal,
-      ),
-      sessions: current.sessions.map((session) =>
-        session.mealId === mealId
-          ? { ...session, checkedIngredientIds: session.checkedIngredientIds.filter((id) => id !== ingredientId) }
-          : session,
-      ),
-    }))
-  }
-
-  const toggleCreatine = () => {
-    const date = todayIso()
-    vibrate(10)
-    setState((current) => {
-      const completed = current.creatineDates.includes(date)
-
-      return {
-        ...current,
-        creatineDates: completed ? current.creatineDates.filter((item) => item !== date) : [date, ...current.creatineDates],
-      }
-    })
-  }
-
-  const openFoodFinder = (request: FoodFinderRequest) => {
-    vibrate(8)
-    setAccentOpen(false)
-    setFoodFinderRequest(request)
-  }
-
-  const editFoodLog = (foodLog: FoodLog) => {
-    openFoodFinder({
-      target: 'log',
-      initialMode: 'search',
-      editingLogId: foodLog.id,
-      initialProduct: foodLogToProduct(foodLog),
-      initialGrams: foodLog.grams,
-    })
-  }
-
-  const deleteFoodLog = (foodLogId: string) => {
     vibrate(12)
     setState((current) => ({
       ...current,
-      foodLogs: current.foodLogs.filter((foodLog) => foodLog.id !== foodLogId),
+      meals: current.meals.filter((meal) => meal.id !== mealId),
+      sessions: current.sessions.filter((item) => item.mealId !== mealId),
     }))
   }
 
-  const saveFoodSelection = (product: FoodProduct, grams: number) => {
-    if (!foodFinderRequest) {
-      return
-    }
+  const addIngredient = (mealId: string) => {
+    vibrate(8)
+    setState((current) => ({
+      ...current,
+      meals: current.meals.map((meal) =>
+        meal.id === mealId
+          ? {
+              ...meal,
+              ingredients: [...meal.ingredients, { id: createId('ingredient'), name: 'Ingrediente', amount: '' }],
+            }
+          : meal,
+      ),
+    }))
+  }
 
-    const nutrition = calculateNutrition(product, grams)
-    const request = foodFinderRequest
-
+  const deleteIngredient = (mealId: string, ingredientId: string) => {
+    vibrate(8)
     setState((current) => {
-      if (request.target === 'meal' && request.mealId) {
-        const ingredient: Ingredient = {
-          id: createId('ingredient'),
-          name: product.brand ? `${product.name} · ${product.brand}` : product.name,
-          amount: `${formatNumber(grams)} g`,
-          calories: nutrition.calories,
-          barcode: product.barcode,
-          imageUrl: product.imageUrl,
-          grams,
-          caloriesPer100g: product.caloriesPer100g,
-          proteinPer100g: product.proteinPer100g,
-          carbsPer100g: product.carbsPer100g,
-          fatPer100g: product.fatPer100g,
-        }
-
-        return {
-          ...current,
-          meals: current.meals.map((meal) =>
-            meal.id === request.mealId
-              ? updateOptionIngredients(meal, request.optionId, (ingredients) =>
-                  ingredients.length === 1 && ingredients[0].name === 'Ingrediente' && ingredients[0].calories === 0
-                    ? [ingredient]
-                    : [...ingredients, ingredient],
-                )
-              : meal,
-          ),
-        }
-      }
-
-      const existingLog = request.editingLogId
-        ? current.foodLogs.find((foodLog) => foodLog.id === request.editingLogId)
-        : undefined
-      const nextLog: FoodLog = {
-        ...product,
-        id: existingLog?.id ?? createId('food-log'),
-        date: existingLog?.date ?? todayIso(),
-        grams,
-        ...nutrition,
-        createdAt: existingLog?.createdAt ?? new Date().toISOString(),
-      }
+      const meals = current.meals.map((meal) =>
+        meal.id === mealId && meal.ingredients.length > 1
+          ? { ...meal, ingredients: meal.ingredients.filter((ingredient) => ingredient.id !== ingredientId) }
+          : meal,
+      )
+      const nextMeal = meals.find((meal) => meal.id === mealId)
 
       return {
         ...current,
-        foodLogs: [nextLog, ...current.foodLogs.filter((foodLog) => foodLog.id !== nextLog.id)],
+        meals,
+        sessions: current.sessions.map((item) => {
+          if (item.mealId !== mealId || !nextMeal) {
+            return item
+          }
+          const checkedIngredientIds = item.checkedIngredientIds.filter((id) => id !== ingredientId)
+          return {
+            ...item,
+            checkedIngredientIds,
+            completed:
+              nextMeal.ingredients.length > 0 &&
+              nextMeal.ingredients.every((ingredient) => checkedIngredientIds.includes(ingredient.id)),
+          }
+        }),
       }
     })
-
-    vibrate(16)
-    setFoodFinderRequest(null)
-    if (request.target === 'log') {
-      setActiveTab('food')
-    }
   }
 
-  const content = foodFinderRequest ? (
-    <FoodFinder
-      request={foodFinderRequest}
-      onClose={() => setFoodFinderRequest(null)}
-      onSave={saveFoodSelection}
-    />
-  ) : state.activeSession && activeMeal ? (
-    <MealFocus
-      activeSession={state.activeSession}
-      meal={activeMeal}
-      onCancel={cancelActiveMeal}
-      onFinish={finishMeal}
-      onToggleIngredient={toggleIngredient}
-    />
-  ) : optionPickerMeal ? (
-    <MealOptionPicker
-      meal={optionPickerMeal}
-      onCancel={() => setOptionPickerMealId(null)}
-      onSelect={(optionId) => beginMeal(optionPickerMeal.id, optionId)}
-    />
-  ) : activeTab === 'today' ? (
-    <TodayView
-      creatineCompleted={state.creatineDates.includes(today)}
-      foodLogs={todayFoodLogs}
-      heroPhrase={currentFoodPhrase}
-      meals={state.meals}
-      sessions={state.sessions}
-      startMeal={startMeal}
-      today={today}
-      toggleCreatine={toggleCreatine}
-    />
-  ) : activeTab === 'food' ? (
-    <FoodLogView
-      foodLogs={todayFoodLogs}
-      onDeleteFoodLog={deleteFoodLog}
-      onEditFoodLog={editFoodLog}
-      openFoodFinder={openFoodFinder}
-      today={today}
-    />
-  ) : activeTab === 'calendar' ? (
-    <CalendarView state={state} />
-  ) : (
-    <PlanView
-      addIngredient={addIngredient}
-      addMeal={addMeal}
-      addMealOption={addMealOption}
-      deleteIngredient={deleteIngredient}
-      deleteMeal={deleteMeal}
-      deleteMealOption={deleteMealOption}
-      meals={state.meals}
-      openFoodFinder={openFoodFinder}
-      updateIngredient={updateIngredient}
-      updateMeal={updateMeal}
-      updateMealOption={updateMealOption}
-    />
-  )
+  const updateNote = (index: number, value: string) => {
+    setState((current) => ({
+      ...current,
+      notes: current.notes.map((note, noteIndex) => (noteIndex === index ? value : note)),
+    }))
+  }
 
-  const isFocusMode = Boolean(state.activeSession || foodFinderRequest || optionPickerMeal)
+  const addNote = () => {
+    setState((current) => ({ ...current, notes: [...current.notes, 'Nueva indicación'] }))
+  }
+
+  const deleteNote = (index: number) => {
+    setState((current) => ({ ...current, notes: current.notes.filter((_, noteIndex) => noteIndex !== index) }))
+  }
+
+  const content =
+    activeTab === 'today' ? (
+      <TodayView
+        creatineCompleted={state.creatineDates.includes(today)}
+        meals={state.meals}
+        sessions={state.sessions}
+        target={state.target}
+        today={today}
+        toggleCreatine={toggleCreatine}
+        toggleIngredient={toggleIngredient}
+        toggleMeal={toggleMeal}
+      />
+    ) : (
+      <PlanView
+        addIngredient={addIngredient}
+        addMeal={addMeal}
+        addNote={addNote}
+        dailyNutrition={dailyNutrition}
+        deleteIngredient={deleteIngredient}
+        deleteMeal={deleteMeal}
+        deleteNote={deleteNote}
+        meals={state.meals}
+        notes={state.notes}
+        target={state.target}
+        updateIngredient={updateIngredient}
+        updateMeal={updateMeal}
+        updateMealNutrition={updateMealNutrition}
+        updateNote={updateNote}
+        updateTarget={updateTarget}
+      />
+    )
 
   return (
-    <div className={isFocusMode ? 'app-shell focus-mode' : 'app-shell'}>
+    <div className="app-shell">
       <header className="app-header">
         <button aria-label="Ir a hoy" className="brand" type="button" onClick={() => setActiveTab('today')}>
           <span className="brand-mark">
@@ -945,7 +635,7 @@ function App() {
           </span>
           <span className="brand-copy">
             <strong>Keep Slopping</strong>
-            <small>{optionPickerMeal ? 'Elige una opción' : isFocusMode ? 'En progreso' : `${formatCalorieRange(totalCalories)} plan`}</small>
+            <small>{formatNumber(state.target.calories)} kcal · plan de Alejandro</small>
           </span>
         </button>
 
@@ -1018,42 +708,26 @@ function App() {
         </div>
       </header>
 
-      {!isFocusMode && (
-        <div className="tabs-wrap">
-          <nav className="tabs" aria-label="Navegacion principal">
-            <TabButton active={activeTab === 'today'} icon={<Utensils size={19} />} label="Hoy" onClick={() => setActiveTab('today')} />
-            <TabButton
-              active={activeTab === 'food'}
-              icon={<Apple size={19} />}
-              label="Alimentos"
-              onClick={() => setActiveTab('food')}
-            />
-            <TabButton
-              active={activeTab === 'calendar'}
-              icon={<CalendarDays size={19} />}
-              label="Calendario"
-              onClick={() => setActiveTab('calendar')}
-            />
-            <TabButton active={activeTab === 'plan'} icon={<Settings2 size={19} />} label="Plan" onClick={() => setActiveTab('plan')} />
-          </nav>
-        </div>
-      )}
+      <div className="tabs-wrap">
+        <nav className="tabs" aria-label="Navegación principal">
+          <TabButton active={activeTab === 'today'} icon={<ListChecks size={19} />} label="Hoy" onClick={() => setActiveTab('today')} />
+          <TabButton active={activeTab === 'plan'} icon={<Settings2 size={19} />} label="Plan" onClick={() => setActiveTab('plan')} />
+        </nav>
+      </div>
 
-      <main className={isFocusMode ? 'main main-focus' : `main main-${activeTab}`}>
-        {!isFocusMode && (
-          <SyncPanel
-            email={syncEmail}
-            isConfigured={isSupabaseConfigured}
-            message={syncMessage}
-            password={syncPassword}
-            session={session}
-            setEmail={setSyncEmail}
-            setPassword={setSyncPassword}
-            status={syncStatus}
-            submit={requestSyncLink}
-            syncCooldown={syncCooldown}
-          />
-        )}
+      <main className={`main main-${activeTab}`}>
+        <SyncPanel
+          email={syncEmail}
+          isConfigured={isSupabaseConfigured}
+          message={syncMessage}
+          password={syncPassword}
+          session={session}
+          setEmail={setSyncEmail}
+          setPassword={setSyncPassword}
+          status={syncStatus}
+          submit={requestSyncLink}
+          syncCooldown={syncCooldown}
+        />
         {isLoaded ? content : <LoadingView />}
       </main>
     </div>
@@ -1163,610 +837,6 @@ function TabButton({
   )
 }
 
-function FoodFinder({
-  onClose,
-  onSave,
-  request,
-}: {
-  onClose: () => void
-  onSave: (product: FoodProduct, grams: number) => void
-  request: FoodFinderRequest
-}) {
-  const [mode, setMode] = useState<FoodFinderMode>(request.initialMode)
-  const [query, setQuery] = useState('')
-  const [manualBarcode, setManualBarcode] = useState('')
-  const [results, setResults] = useState<FoodProduct[]>([])
-  const [selectedProduct, setSelectedProduct] = useState<FoodProduct | null>(request.initialProduct ?? null)
-  const [grams, setGrams] = useState(request.initialGrams ?? request.initialProduct?.servingGrams ?? 100)
-  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
-  const [message, setMessage] = useState('')
-  const [hasSearched, setHasSearched] = useState(false)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const abortRef = useRef<AbortController | null>(null)
-  const scanHandledRef = useRef(false)
-
-  const selectProduct = useCallback((product: FoodProduct) => {
-    setSelectedProduct(product)
-    setGrams(product.servingGrams)
-    setStatus('idle')
-    setMessage('')
-  }, [])
-
-  const lookupBarcode = useCallback(
-    async (rawBarcode: string) => {
-      const barcode = normalizeBarcode(rawBarcode)
-      if (barcode.length < 6) {
-        setStatus('error')
-        setMessage('Ingresa un codigo de barras valido.')
-        return
-      }
-
-      abortRef.current?.abort()
-      const controller = new AbortController()
-      abortRef.current = controller
-      setStatus('loading')
-      setMessage('Buscando producto...')
-
-      try {
-        const product = await getFoodByBarcode(barcode, controller.signal)
-        if (!product) {
-          setStatus('error')
-          setMessage('Ese producto no tiene informacion nutricional disponible.')
-          scanHandledRef.current = false
-          return
-        }
-
-        vibrate(14)
-        selectProduct(product)
-      } catch (error) {
-        if (controller.signal.aborted) {
-          return
-        }
-        setStatus('error')
-        setMessage(error instanceof Error ? error.message : 'No se pudo buscar el producto.')
-        scanHandledRef.current = false
-      }
-    },
-    [selectProduct],
-  )
-
-  useEffect(() => {
-    if (mode !== 'scan' || selectedProduct) {
-      return
-    }
-
-    let cancelled = false
-    let stopScanner: (() => void) | undefined
-    scanHandledRef.current = false
-
-    const startScanner = async () => {
-      if (!videoRef.current) {
-        return
-      }
-
-      try {
-        setStatus('loading')
-        setMessage('Iniciando camara...')
-        const { BrowserMultiFormatReader } = await import('@zxing/browser')
-        const codeReader = new BrowserMultiFormatReader()
-        const controls = await codeReader.decodeFromConstraints(
-          {
-            audio: false,
-            video: {
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-          },
-          videoRef.current,
-          (result, _error, scannerControls) => {
-            if (!result || scanHandledRef.current) {
-              return
-            }
-
-            scanHandledRef.current = true
-            scannerControls.stop()
-            void lookupBarcode(result.getText())
-          },
-        )
-
-        if (cancelled) {
-          controls.stop()
-          return
-        }
-
-        stopScanner = () => controls.stop()
-        setStatus('idle')
-        setMessage('Centra el codigo dentro del marco.')
-      } catch (error) {
-        if (cancelled) {
-          return
-        }
-
-        console.error('Could not start barcode scanner', error)
-        setStatus('error')
-        setMessage('No se pudo abrir la camara. Revisa el permiso o escribe el codigo.')
-      }
-    }
-
-    void startScanner()
-
-    return () => {
-      cancelled = true
-      stopScanner?.()
-    }
-  }, [lookupBarcode, mode, selectedProduct])
-
-  useEffect(
-    () => () => {
-      abortRef.current?.abort()
-    },
-    [],
-  )
-
-  const submitSearch = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (query.trim().length < 2) {
-      setStatus('error')
-      setMessage('Escribe al menos dos caracteres.')
-      return
-    }
-
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
-    setStatus('loading')
-    setMessage('')
-    setHasSearched(true)
-
-    try {
-      const nextResults = await searchFoods(query, controller.signal)
-      setResults(nextResults)
-      setStatus('idle')
-      setMessage(nextResults.length ? '' : 'No encontramos alimentos con calorias disponibles.')
-    } catch (error) {
-      if (controller.signal.aborted) {
-        return
-      }
-      setStatus('error')
-      setMessage(error instanceof Error ? error.message : 'No se pudo buscar.')
-    }
-  }
-
-  if (selectedProduct) {
-    const nutrition = calculateNutrition(selectedProduct, grams)
-    const saveLabel =
-      request.target === 'meal' ? 'Agregar al plan' : request.editingLogId ? 'Guardar cambios' : 'Registrar alimento'
-
-    return (
-      <section className="food-finder enter">
-        <div className="finder-head">
-          <button
-            aria-label="Volver"
-            className="icon-button flat"
-            type="button"
-            onClick={() => {
-              if (request.initialProduct) {
-                onClose()
-                return
-              }
-              setSelectedProduct(null)
-              scanHandledRef.current = false
-            }}
-          >
-            <ArrowLeft size={19} />
-          </button>
-          <div>
-            <span>Porcion</span>
-            <h1>Ajustar alimento</h1>
-          </div>
-          <button aria-label="Cerrar" className="icon-button flat" type="button" onClick={onClose}>
-            <X size={19} />
-          </button>
-        </div>
-
-        <article className="portion-card surface">
-          <div className="portion-product">
-            <FoodImage name={selectedProduct.name} src={selectedProduct.imageUrl} />
-            <div>
-              <span>{selectedProduct.brand || 'Open Food Facts'}</span>
-              <h2>{selectedProduct.name}</h2>
-              <small>{formatNumber(selectedProduct.caloriesPer100g)} kcal por 100 g</small>
-            </div>
-          </div>
-
-          <div className="portion-input">
-            <label htmlFor="food-portion-grams">Peso de la porcion</label>
-            <div>
-              <input
-                autoFocus
-                id="food-portion-grams"
-                inputMode="decimal"
-                min="1"
-                step="1"
-                type="number"
-                value={grams}
-                onFocus={(event) => event.currentTarget.select()}
-                onChange={(event) => setGrams(Math.max(0, Number(event.target.value)))}
-              />
-              <strong>g</strong>
-            </div>
-          </div>
-
-          <div className="nutrition-total">
-            <span>Calorias</span>
-            <strong>{formatNumber(nutrition.calories)} kcal</strong>
-          </div>
-
-          <div className="macro-grid">
-            <div>
-              <span>Proteina</span>
-              <strong>{formatNumber(nutrition.protein)} g</strong>
-            </div>
-            <div>
-              <span>Carbos</span>
-              <strong>{formatNumber(nutrition.carbs)} g</strong>
-            </div>
-            <div>
-              <span>Grasa</span>
-              <strong>{formatNumber(nutrition.fat)} g</strong>
-            </div>
-          </div>
-
-          <button
-            className="primary-button save-food-button"
-            disabled={!Number.isFinite(grams) || grams <= 0}
-            type="button"
-            onClick={() => onSave(selectedProduct, grams)}
-          >
-            <CheckCircle2 size={18} />
-            {saveLabel}
-          </button>
-        </article>
-
-        <FoodDataCredit />
-      </section>
-    )
-  }
-
-  return (
-    <section className="food-finder enter">
-      <div className="finder-head">
-        <button aria-label="Cerrar" className="icon-button flat" type="button" onClick={onClose}>
-          <X size={19} />
-        </button>
-        <div>
-          <span>Registro rapido</span>
-          <h1>Agregar alimento</h1>
-        </div>
-        <span aria-hidden="true" className="finder-head-spacer" />
-      </div>
-
-      <div className="finder-modes" role="tablist" aria-label="Metodo para agregar alimento">
-        <button
-          aria-selected={mode === 'search'}
-          className={mode === 'search' ? 'active' : ''}
-          role="tab"
-          type="button"
-          onClick={() => {
-            setMode('search')
-            setMessage('')
-            setStatus('idle')
-          }}
-        >
-          <Search size={17} />
-          Buscar
-        </button>
-        <button
-          aria-selected={mode === 'scan'}
-          className={mode === 'scan' ? 'active' : ''}
-          role="tab"
-          type="button"
-          onClick={() => {
-            setMode('scan')
-            setMessage('')
-            setStatus('idle')
-          }}
-        >
-          <ScanBarcode size={18} />
-          Escanear
-        </button>
-      </div>
-
-      {mode === 'search' ? (
-        <>
-          <form className="food-search" onSubmit={submitSearch}>
-            <Search size={18} />
-            <input
-              aria-label="Buscar alimento"
-              autoFocus
-              enterKeyHint="search"
-              placeholder="Yogurt griego, avena..."
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <button aria-label="Buscar" className="icon-button brand-button" disabled={status === 'loading'} type="submit">
-              {status === 'loading' ? <LoaderCircle className="spin" size={18} /> : <Search size={18} />}
-            </button>
-          </form>
-
-          <div className="food-results" aria-live="polite">
-            {results.map((product) => (
-              <button className="food-result" key={product.barcode} type="button" onClick={() => selectProduct(product)}>
-                <FoodImage name={product.name} src={product.imageUrl} />
-                <span>
-                  <strong>{product.name}</strong>
-                  <small>{product.brand || 'Sin marca'}</small>
-                </span>
-                <em>{formatNumber(product.caloriesPer100g)} kcal</em>
-              </button>
-            ))}
-            {hasSearched && !results.length && status !== 'loading' && !message && (
-              <div className="finder-empty">Sin resultados</div>
-            )}
-          </div>
-        </>
-      ) : (
-        <div className="scanner-shell">
-          <div className="scanner-preview">
-            <video ref={videoRef} autoPlay muted playsInline />
-            <span className="scanner-frame" aria-hidden="true" />
-            {status === 'loading' && (
-              <span className="scanner-loading">
-                <LoaderCircle className="spin" size={22} />
-              </span>
-            )}
-          </div>
-
-          <form
-            className="barcode-manual"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void lookupBarcode(manualBarcode)
-            }}
-          >
-            <input
-              aria-label="Codigo de barras"
-              inputMode="numeric"
-              placeholder="Escribir codigo"
-              value={manualBarcode}
-              onChange={(event) => setManualBarcode(normalizeBarcode(event.target.value))}
-            />
-            <button className="secondary-button" disabled={status === 'loading'} type="submit">
-              Buscar
-            </button>
-          </form>
-        </div>
-      )}
-
-      {message && (
-        <div className={status === 'error' ? 'finder-message error' : 'finder-message'} role={status === 'error' ? 'alert' : 'status'}>
-          {message}
-        </div>
-      )}
-      <FoodDataCredit />
-    </section>
-  )
-}
-
-function FoodImage({ name, src }: { name: string; src?: string }) {
-  const [failed, setFailed] = useState(false)
-
-  useEffect(() => {
-    setFailed(false)
-  }, [src])
-
-  return (
-    <span className="food-image">
-      {src && !failed ? (
-        <img alt="" loading="lazy" src={src} onError={() => setFailed(true)} />
-      ) : (
-        <Utensils aria-label={name} size={19} />
-      )}
-    </span>
-  )
-}
-
-function FoodDataCredit() {
-  return (
-    <small className="food-credit">
-      Datos de{' '}
-      <a href="https://world.openfoodfacts.org/" rel="noreferrer" target="_blank">
-        Open Food Facts
-      </a>
-      . Verifica la etiqueta del producto.
-    </small>
-  )
-}
-
-function TodayView({
-  creatineCompleted,
-  foodLogs,
-  heroPhrase,
-  meals,
-  sessions,
-  startMeal,
-  today,
-  toggleCreatine,
-}: {
-  creatineCompleted: boolean
-  foodLogs: FoodLog[]
-  heroPhrase: string
-  meals: Meal[]
-  sessions: MealSession[]
-  startMeal: (mealId: string) => void
-  today: string
-  toggleCreatine: () => void
-}) {
-  const daySummaries = useMemo(
-    () => buildDaySummaries(meals, sessions, creatineCompleted ? [today] : [], foodLogs),
-    [creatineCompleted, foodLogs, meals, sessions, today],
-  )
-  const todaySummary = getDaySummary(daySummaries, today)
-  const mealsById = useMemo(() => new Map(meals.map((meal) => [meal.id, meal])), [meals])
-  const sessionsByMealId = useMemo(
-    () => new Map(todaySummary.sessions.map((session) => [session.mealId, session])),
-    [todaySummary.sessions],
-  )
-  const completedCalories =
-    todaySummary.sessions.reduce((total, session) => total + sessionCalories(session, mealsById.get(session.mealId)), 0) +
-    foodLogs.reduce((total, foodLog) => total + foodLog.calories, 0)
-  const totalCalories = useMemo(() => dayCalorieRange(meals), [meals])
-  const completedCount = todaySummary.completedMealIds.size
-  const totalTasks = meals.length + 1
-  const completedTasks = completedCount + (creatineCompleted ? 1 : 0)
-  const progress = totalTasks ? Math.round((completedTasks / totalTasks) * 100) : 0
-
-  return (
-    <section className="today-view enter">
-      <div className="today-hero-copy">
-        <span>Plan de hoy</span>
-        <h1 className="hero-phrase" key={heroPhrase}>
-          {heroPhrase}
-        </h1>
-      </div>
-
-      <div className="hero-panel">
-        <div className="hero-stats">
-          <MetricCard icon={<Flame size={18} />} label="Objetivo" value={formatCalorieRange(totalCalories)} />
-          <MetricCard icon={<CheckCircle2 size={18} />} label="Hechas" value={`${completedTasks}/${totalTasks}`} />
-          <MetricCard icon={<ChefHat size={18} />} label="Registrado" value={`${formatNumber(completedCalories)} kcal`} />
-        </div>
-        <div className="day-progress">
-          <span style={{ width: `${progress}%` }} />
-        </div>
-      </div>
-
-      <button className={creatineCompleted ? 'creatine-card complete' : 'creatine-card'} type="button" onClick={toggleCreatine}>
-        <span className="check-icon">{creatineCompleted ? <Check size={18} /> : <Circle size={18} />}</span>
-        <span>
-          <strong>Creatina</strong>
-          <small>Tomar hoy</small>
-        </span>
-        <em>{creatineCompleted ? 'Hecho' : 'Pendiente'}</em>
-      </button>
-
-      <div className="meal-list">
-        {meals.map((meal) => {
-          const mealSession = sessionsByMealId.get(meal.id)
-          const complete = todaySummary.completedMealIds.has(meal.id)
-          return <MealCard complete={complete} key={meal.id} meal={meal} session={mealSession} startMeal={startMeal} />
-        })}
-      </div>
-
-    </section>
-  )
-}
-
-function FoodLogView({
-  foodLogs,
-  onDeleteFoodLog,
-  onEditFoodLog,
-  openFoodFinder,
-  today,
-}: {
-  foodLogs: FoodLog[]
-  onDeleteFoodLog: (foodLogId: string) => void
-  onEditFoodLog: (foodLog: FoodLog) => void
-  openFoodFinder: (request: FoodFinderRequest) => void
-  today: string
-}) {
-  const loggedCalories = foodLogs.reduce((total, foodLog) => total + foodLog.calories, 0)
-
-  return (
-    <section className="food-view enter">
-      <div className="plan-head food-log-head">
-        <div>
-          <span>{formatDate(today)}</span>
-          <h1>Alimentos</h1>
-        </div>
-        <strong>{formatNumber(loggedCalories)} kcal</strong>
-      </div>
-
-      <section className="quick-log surface">
-        <div>
-          <span>Registro diario</span>
-          <strong>Busca o escanea un alimento</strong>
-        </div>
-        <div className="quick-log-actions">
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => openFoodFinder({ target: 'log', initialMode: 'search' })}
-          >
-            <Search size={17} />
-            Buscar
-          </button>
-          <button
-            className="primary-button compact"
-            type="button"
-            onClick={() => openFoodFinder({ target: 'log', initialMode: 'scan' })}
-          >
-            <ScanBarcode size={18} />
-            Escanear
-          </button>
-        </div>
-      </section>
-
-      <section className="food-log-section" aria-label="Alimentos registrados hoy">
-        <div className="section-head">
-          <span>Registrado hoy</span>
-          <strong>
-            {foodLogs.length} {foodLogs.length === 1 ? 'alimento' : 'alimentos'}
-          </strong>
-        </div>
-        {foodLogs.length > 0 ? (
-          <div className="food-log-list">
-            {foodLogs.map((foodLog) => (
-              <FoodLogRow foodLog={foodLog} key={foodLog.id} onDelete={onDeleteFoodLog} onEdit={onEditFoodLog} />
-            ))}
-          </div>
-        ) : (
-          <div className="food-log-empty surface">
-            <Apple size={20} />
-            <div>
-              <strong>Sin alimentos registrados</strong>
-              <span>Tu registro de hoy aparecera aqui.</span>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <FoodDataCredit />
-    </section>
-  )
-}
-
-function FoodLogRow({
-  foodLog,
-  onDelete,
-  onEdit,
-}: {
-  foodLog: FoodLog
-  onDelete: (foodLogId: string) => void
-  onEdit: (foodLog: FoodLog) => void
-}) {
-  return (
-    <article className="food-log-row">
-      <FoodImage name={foodLog.name} src={foodLog.imageUrl} />
-      <button className="food-log-main" type="button" onClick={() => onEdit(foodLog)}>
-        <strong>{foodLog.name}</strong>
-        <span>{formatNumber(foodLog.grams)} g · {foodLog.brand || 'Open Food Facts'}</span>
-      </button>
-      <strong>{formatNumber(foodLog.calories)} kcal</strong>
-      <button
-        aria-label={`Eliminar ${foodLog.name}`}
-        className="icon-button flat danger-text"
-        type="button"
-        onClick={() => onDelete(foodLog.id)}
-      >
-        <Trash2 size={16} />
-      </button>
-    </article>
-  )
-}
-
 function MetricCard({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
     <div className="metric-card">
@@ -1777,520 +847,363 @@ function MetricCard({ icon, label, value }: { icon: ReactNode; label: string; va
   )
 }
 
-function MealCard({
-  complete,
-  meal,
-  session,
-  startMeal,
+function TodayView({
+  creatineCompleted,
+  meals,
+  sessions,
+  target,
+  today,
+  toggleCreatine,
+  toggleIngredient,
+  toggleMeal,
 }: {
-  complete: boolean
-  meal: Meal
-  session?: MealSession
-  startMeal: (mealId: string) => void
+  creatineCompleted: boolean
+  meals: Meal[]
+  sessions: MealSession[]
+  target: Nutrition
+  today: string
+  toggleCreatine: () => void
+  toggleIngredient: (mealId: string, ingredientId: string) => void
+  toggleMeal: (mealId: string) => void
 }) {
-  const options = getMealOptions(meal)
-  const selectedOption = session ? getMealOption(meal, session.optionId) : undefined
-  const detail =
-    selectedOption && meal.options?.length
-      ? selectedOption.name
-      : options.length > 1
-        ? `${options.length} opciones`
-        : `${options[0].ingredients.length} ingredientes`
-
-  return (
-    <article className={complete ? 'meal-card complete' : 'meal-card'}>
-      <div className="meal-card-head">
-        <div>
-          <span>{meal.slot || 'Comida'}</span>
-          <h2>{meal.name}</h2>
-          <small>{detail}</small>
-        </div>
-        <strong>{formatCalorieRange(mealCalorieRange(meal))}</strong>
-      </div>
-
-      <button className={complete ? 'primary-button done' : 'primary-button'} type="button" onClick={() => startMeal(meal.id)}>
-        {complete ? <CheckCircle2 size={18} /> : <Play size={18} />}
-        {complete ? 'Rehacer' : 'Iniciar'}
-      </button>
-    </article>
+  const sessionsByMealId = useMemo(
+    () =>
+      new Map(
+        meals.flatMap((meal) => {
+          const session = getLatestMealSession(sessions, meal.id, today)
+          return session ? [[meal.id, session] as const] : []
+        }),
+      ),
+    [meals, sessions, today],
   )
-}
-
-function MealOptionPicker({
-  meal,
-  onCancel,
-  onSelect,
-}: {
-  meal: Meal
-  onCancel: () => void
-  onSelect: (optionId: string) => void
-}) {
-  const options = getMealOptions(meal)
+  const completedMeals = meals.filter((meal) => {
+    const session = sessionsByMealId.get(meal.id)
+    return Boolean(session && isMealSessionComplete(session, meal))
+  }).length
+  const totalIngredients = meals.reduce((total, meal) => total + meal.ingredients.length, 0)
+  const checkedIngredients = meals.reduce((total, meal) => {
+    const checkedIds = new Set(sessionsByMealId.get(meal.id)?.checkedIngredientIds ?? [])
+    return total + meal.ingredients.filter((ingredient) => checkedIds.has(ingredient.id)).length
+  }, 0)
+  const completedTasks = completedMeals + (creatineCompleted ? 1 : 0)
+  const totalTasks = meals.length + 1
+  const progress = totalTasks ? Math.round((completedTasks / totalTasks) * 100) : 0
 
   return (
-    <section className="meal-option-picker enter">
-      <div className="focus-head option-picker-head">
-        <button aria-label="Volver al plan" className="icon-button flat" type="button" onClick={onCancel}>
-          <ArrowLeft size={18} />
-        </button>
-        <div>
-          <span>{meal.slot || 'Comida'}</span>
-          <h1>{meal.name}</h1>
+    <section className="today-view enter">
+      <div className="today-title">
+        <span>{formatDate(today)}</span>
+        <h1>Checklist de hoy</h1>
+        <p>Marca cada ingrediente a medida que completas el plan.</p>
+      </div>
+
+      <section className="hero-panel" aria-label="Progreso del día">
+        <div className="hero-stats">
+          <MetricCard icon={<Flame size={18} />} label="Objetivo" value={`${formatNumber(target.calories)} kcal`} />
+          <MetricCard icon={<CheckCircle2 size={18} />} label="Comidas" value={`${completedMeals}/${meals.length}`} />
+          <MetricCard icon={<ListChecks size={18} />} label="Ingredientes" value={`${checkedIngredients}/${totalIngredients}`} />
         </div>
-        <span className="option-count">{options.length}</span>
-      </div>
+        <div className="progress-copy">
+          <span>Progreso diario</span>
+          <strong>{progress}%</strong>
+        </div>
+        <div className="day-progress">
+          <span style={{ width: `${progress}%` }} />
+        </div>
+      </section>
 
-      <div className="option-picker-title">
-        <span>Elige una opción</span>
-        <strong>¿Qué vas a preparar?</strong>
-      </div>
+      <button className={creatineCompleted ? 'creatine-card complete' : 'creatine-card'} type="button" onClick={toggleCreatine}>
+        <span className="check-icon">{creatineCompleted ? <Check size={18} /> : <Circle size={18} />}</span>
+        <span>
+          <strong>Creatina</strong>
+          <small>Recordatorio diario</small>
+        </span>
+        <em>{creatineCompleted ? 'Hecho' : 'Pendiente'}</em>
+      </button>
 
-      <div className="meal-option-list">
-        {options.map((option) => (
-          <button
-            aria-label={`Elegir ${option.name}`}
-            className="meal-option-card"
-            key={option.id}
-            type="button"
-            onClick={() => onSelect(option.id)}
-          >
-            <span className="option-card-main">
-              <strong>{option.name}</strong>
-              <small>{option.ingredients.map((ingredient) => ingredient.name).join(' · ')}</small>
-            </span>
-            <span className="option-card-meta">
-              <strong>{formatNumber(optionCalories(option))} kcal</strong>
-              <small>{option.ingredients.length} ingredientes</small>
-            </span>
-            <ChevronRight size={18} />
-          </button>
+      <div className="meal-list">
+        {meals.map((meal) => (
+          <MealChecklistCard
+            key={meal.id}
+            meal={meal}
+            session={sessionsByMealId.get(meal.id)}
+            toggleIngredient={toggleIngredient}
+            toggleMeal={toggleMeal}
+          />
         ))}
       </div>
+
+      {!meals.length && (
+        <section className="empty-plan surface">
+          <Utensils size={21} />
+          <div>
+            <strong>Tu plan está vacío</strong>
+            <span>Agrega una comida desde la pestaña Plan.</span>
+          </div>
+        </section>
+      )}
     </section>
   )
 }
 
-function ElapsedTime({ startedAt }: { startedAt: string }) {
-  const [now, setNow] = useState(() => Date.now())
-
-  useEffect(() => {
-    const interval = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(interval)
-  }, [startedAt])
-
-  const startTime = new Date(startedAt).getTime()
-  const elapsedSeconds = Number.isNaN(startTime) ? 0 : Math.max(0, Math.floor((now - startTime) / 1000))
-  return <>{formatDuration(elapsedSeconds)}</>
-}
-
-function MealFocus({
-  activeSession,
+function MealChecklistCard({
   meal,
-  onCancel,
-  onFinish,
-  onToggleIngredient,
+  session,
+  toggleIngredient,
+  toggleMeal,
 }: {
-  activeSession: ActiveMealSession
   meal: Meal
-  onCancel: () => void
-  onFinish: () => void
-  onToggleIngredient: (ingredientId: string) => void
+  session?: MealSession
+  toggleIngredient: (mealId: string, ingredientId: string) => void
+  toggleMeal: (mealId: string) => void
 }) {
-  const option = getMealOption(meal, activeSession.optionId)
-  const ingredients = option.ingredients
-  const completedCount = ingredients.filter((ingredient) => activeSession.checkedIngredientIds.includes(ingredient.id)).length
-  const totalCount = ingredients.length
-  const progress = totalCount ? Math.round((completedCount / totalCount) * 100) : 0
-  const calories = sessionCalories(activeSession, meal)
-  const complete = isMealSessionComplete(activeSession, meal)
+  const checkedIds = new Set(session?.checkedIngredientIds ?? [])
+  const checkedCount = meal.ingredients.filter((ingredient) => checkedIds.has(ingredient.id)).length
+  const complete = Boolean(session && isMealSessionComplete(session, meal))
 
   return (
-    <section className="meal-focus enter">
-      <div className="focus-head">
-        <button aria-label="Cancelar comida" className="icon-button flat" type="button" onClick={onCancel}>
-          <X size={18} />
+    <article className={complete ? 'meal-checklist complete' : 'meal-checklist'}>
+      <div className="meal-checklist-head">
+        <button
+          aria-label={complete ? `Marcar ${meal.name} como pendiente` : `Completar ${meal.name}`}
+          className="meal-master-check"
+          type="button"
+          onClick={() => toggleMeal(meal.id)}
+        >
+          {complete ? <Check size={20} /> : <Circle size={20} />}
         </button>
-        <div>
-          <span>{meal.options?.length ? meal.name : meal.slot || 'Comida'}</span>
-          <h1>{meal.options?.length ? option.name : meal.name}</h1>
+        <div className="meal-title-copy">
+          <span>{meal.slot || 'Comida'}</span>
+          <h2>{meal.name}</h2>
+          <small>{checkedCount}/{meal.ingredients.length} ingredientes</small>
         </div>
-        <div className="timer-chip">
-          <Clock3 size={15} />
-          <ElapsedTime startedAt={activeSession.startedAt} />
-        </div>
-      </div>
-
-      <div className="focus-progress">
-        <div>
-          <span>{completedCount}/{totalCount} ingredientes</span>
-          <strong>{formatNumber(calories)} kcal</strong>
-        </div>
-        <div className="day-progress large">
-          <span style={{ width: `${progress}%` }} />
+        <div className="meal-calories">
+          <strong>~{formatNumber(meal.nutrition.calories)}</strong>
+          <small>kcal</small>
         </div>
       </div>
 
-      <div className="checklist">
-        {ingredients.map((ingredient) => {
-          const checked = activeSession.checkedIngredientIds.includes(ingredient.id)
+      <NutritionChips nutrition={meal.nutrition} />
+
+      <div className="ingredient-checklist">
+        {meal.ingredients.map((ingredient) => {
+          const checked = checkedIds.has(ingredient.id)
           return (
             <button
-              className={checked ? 'check-row checked' : 'check-row'}
+              aria-label={`${checked ? 'Desmarcar' : 'Marcar'} ${ingredient.name} de ${meal.name}`}
+              className={checked ? 'ingredient-check checked' : 'ingredient-check'}
               key={ingredient.id}
               type="button"
-              onClick={() => onToggleIngredient(ingredient.id)}
+              onClick={() => toggleIngredient(meal.id, ingredient.id)}
             >
-              <span className="check-icon">{checked ? <Check size={18} /> : <Circle size={18} />}</span>
+              <span className="check-icon">{checked ? <Check size={17} /> : <Circle size={17} />}</span>
               <span>
                 <strong>{ingredient.name}</strong>
                 <small>{ingredient.amount}</small>
               </span>
-              <em>{formatNumber(ingredient.calories)} kcal</em>
             </button>
           )
         })}
       </div>
-
-      <button className={complete ? 'finish-button complete' : 'finish-button'} type="button" onClick={onFinish}>
-        <Save size={19} />
-        {complete ? 'Terminar comida' : 'Guardar avance'}
-      </button>
-    </section>
+    </article>
   )
 }
 
-function CalendarView({ state }: { state: AppState }) {
-  const latestSessionDate = state.sessions[0]?.date ?? todayIso()
-  const [visibleMonth, setVisibleMonth] = useState(latestSessionDate.slice(0, 7))
-  const [selectedDate, setSelectedDate] = useState(latestSessionDate)
-  const daySummaries = useMemo(
-    () => buildDaySummaries(state.meals, state.sessions, state.creatineDates, state.foodLogs),
-    [state.creatineDates, state.foodLogs, state.meals, state.sessions],
+function NutritionChips({ nutrition }: { nutrition: Nutrition }) {
+  return (
+    <div className="nutrition-chips" aria-label="Macronutrientes">
+      <span><strong>P</strong> {formatNumber(nutrition.protein)} g</span>
+      <span><strong>C</strong> {formatNumber(nutrition.carbs)} g</span>
+      <span><strong>G</strong> {formatNumber(nutrition.fat)} g</span>
+    </div>
   )
-  const calendarDays = useMemo(() => buildCalendarDays(visibleMonth, daySummaries), [daySummaries, visibleMonth])
-  const selectedSummary = getDaySummary(daySummaries, selectedDate)
+}
 
-  const changeMonth = (offset: number) => {
-    vibrate(6)
-    const nextMonth = addMonths(visibleMonth, offset)
-    setVisibleMonth(nextMonth)
-    setSelectedDate(`${nextMonth}-01`)
-  }
+function NutritionFields({
+  legend,
+  nutrition,
+  update,
+}: {
+  legend: string
+  nutrition: Nutrition
+  update: (patch: Partial<Nutrition>) => void
+}) {
+  const fields: Array<{ key: keyof Nutrition; label: string; unit: string }> = [
+    { key: 'calories', label: 'Calorías', unit: 'kcal' },
+    { key: 'protein', label: 'Proteína', unit: 'g' },
+    { key: 'carbs', label: 'Carbohidratos', unit: 'g' },
+    { key: 'fat', label: 'Grasas', unit: 'g' },
+  ]
 
   return (
-    <section className="calendar-view enter">
-      <section className="surface calendar-panel">
-        <div className="calendar-head">
-          <button aria-label="Mes anterior" className="icon-button flat" type="button" onClick={() => changeMonth(-1)}>
-            <ChevronLeft size={18} />
-          </button>
-          <strong>{formatMonth(visibleMonth)}</strong>
-          <button aria-label="Mes siguiente" className="icon-button flat" type="button" onClick={() => changeMonth(1)}>
-            <ChevronRight size={18} />
-          </button>
-        </div>
-
-        <div className="calendar-weekdays" aria-hidden="true">
-          {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((day, index) => (
-            <span key={`${day}-${index}`}>{day}</span>
-          ))}
-        </div>
-
-        <div className="calendar-grid">
-          {calendarDays.map((day) => {
-            const isEmpty = day.dayNumber === null
-            const className = [
-              'calendar-day',
-              isEmpty ? 'empty' : '',
-              day.isCurrentMonth ? '' : 'muted',
-              day.hasProgress ? 'partial' : '',
-              day.isFulfilled ? 'fulfilled' : '',
-              !isEmpty && day.date === selectedDate ? 'selected' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')
-
-            return (
-              <button
-                aria-label={isEmpty ? 'Dia vacio' : `${formatDate(day.date)}${day.isFulfilled ? ', plan cumplido' : ', pendiente'}`}
-                className={className}
-                disabled={isEmpty}
-                key={day.date}
-                type="button"
-                onClick={() => {
-                  if (isEmpty) {
-                    return
-                  }
-                  vibrate(day.hasProgress ? 8 : 4)
-                  setSelectedDate(day.date)
-                }}
-              >
-                {day.dayNumber ?? ''}
-              </button>
-            )
-          })}
-        </div>
-      </section>
-
-      <section className="surface selected-day" key={selectedDate}>
-        <div className="selected-day-head">
-          <div>
-            <span>{formatDate(selectedDate)}</span>
-            <strong>{selectedSummary.fulfilled ? 'Plan cumplido' : `${selectedSummary.completedMealIds.size}/${state.meals.length} comidas`}</strong>
-          </div>
-          {selectedSummary.fulfilled ? <CheckCircle2 size={22} /> : <CalendarDays size={22} />}
-        </div>
-
-        <div className="day-meals">
-          <article className={selectedSummary.creatineCompleted ? 'day-meal done' : 'day-meal'}>
-            <div>
-              <strong>Creatina</strong>
-              <span>Tomar hoy</span>
-            </div>
-            <small>{selectedSummary.creatineCompleted ? 'Hecho' : 'Pendiente'}</small>
-          </article>
-
-          {selectedSummary.foodLogs.map((foodLog) => (
-            <article className="day-meal quick-food" key={foodLog.id}>
-              <div>
-                <strong>{foodLog.name}</strong>
-                <span>{formatNumber(foodLog.grams)} g · Registro rapido</span>
-              </div>
-              <small>{formatNumber(foodLog.calories)} kcal</small>
-            </article>
-          ))}
-
-          {state.meals.map((meal) => {
-            const session = selectedSummary.sessions.find((item) => item.mealId === meal.id)
-            const option = session ? getMealOption(meal, session.optionId) : undefined
-            const complete = session ? isMealSessionComplete(session, meal) : false
-            const checkedCount = session
-              ? option?.ingredients.filter((ingredient) => session.checkedIngredientIds.includes(ingredient.id)).length ?? 0
-              : 0
-            return (
-              <article className={complete ? 'day-meal done' : 'day-meal'} key={meal.id}>
-                <div>
-                  <strong>{meal.name}</strong>
-                  <span>
-                    {session && option ? `${option.name} · ${checkedCount}/${option.ingredients.length} ingredientes` : 'Sin registro'}
-                  </span>
-                </div>
-                <small>{session ? `${formatNumber(sessionCalories(session, meal))} kcal` : formatCalorieRange(mealCalorieRange(meal))}</small>
-              </article>
-            )
-          })}
-        </div>
-      </section>
-    </section>
+    <fieldset className="nutrition-fields">
+      <legend>{legend}</legend>
+      <div>
+        {fields.map((field) => (
+          <label key={field.key}>
+            <span>{field.label}</span>
+            <span className="number-field">
+              <input
+                aria-label={`${legend}: ${field.label}`}
+                inputMode="decimal"
+                min="0"
+                type="number"
+                value={nutrition[field.key]}
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => update({ [field.key]: Math.max(0, Number(event.target.value)) })}
+              />
+              <small>{field.unit}</small>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
   )
 }
 
 function PlanView({
   addIngredient,
   addMeal,
-  addMealOption,
+  addNote,
+  dailyNutrition,
   deleteIngredient,
   deleteMeal,
-  deleteMealOption,
+  deleteNote,
   meals,
-  openFoodFinder,
+  notes,
+  target,
   updateIngredient,
   updateMeal,
-  updateMealOption,
+  updateMealNutrition,
+  updateNote,
+  updateTarget,
 }: {
-  addIngredient: (mealId: string, optionId?: string) => void
+  addIngredient: (mealId: string) => void
   addMeal: () => string
-  addMealOption: (mealId: string) => string
-  deleteIngredient: (mealId: string, optionId: string | undefined, ingredientId: string) => void
+  addNote: () => void
+  dailyNutrition: Nutrition
+  deleteIngredient: (mealId: string, ingredientId: string) => void
   deleteMeal: (mealId: string) => void
-  deleteMealOption: (mealId: string, optionId: string) => void
+  deleteNote: (index: number) => void
   meals: Meal[]
-  openFoodFinder: (request: FoodFinderRequest) => void
-  updateIngredient: (mealId: string, optionId: string | undefined, ingredientId: string, patch: Partial<Ingredient>) => void
+  notes: string[]
+  target: Nutrition
+  updateIngredient: (mealId: string, ingredientId: string, patch: Partial<Ingredient>) => void
   updateMeal: (mealId: string, patch: Partial<Meal>) => void
-  updateMealOption: (mealId: string, optionId: string, patch: Partial<MealOption>) => void
+  updateMealNutrition: (mealId: string, patch: Partial<Nutrition>) => void
+  updateNote: (index: number, value: string) => void
+  updateTarget: (patch: Partial<Nutrition>) => void
 }) {
   const [expandedMealId, setExpandedMealId] = useState('')
-  const [selectedOptionId, setSelectedOptionId] = useState('')
 
   return (
     <section className="plan-view enter">
       <div className="plan-head">
         <div>
-          <span>Plan diario</span>
-          <h1>{formatCalorieRange(dayCalorieRange(meals))}/día</h1>
+          <span>Plan de Alejandro</span>
+          <h1>Editar plan</h1>
+          <p>Las modificaciones se guardan automáticamente.</p>
         </div>
         <button
           aria-label="Agregar comida"
           className="icon-button brand-button"
           type="button"
-          onClick={() => {
-            setSelectedOptionId('')
-            setExpandedMealId(addMeal())
-          }}
+          onClick={() => setExpandedMealId(addMeal())}
         >
           <Plus size={19} />
         </button>
       </div>
 
+      <section className="surface target-card">
+        <div className="target-card-head">
+          <div>
+            <span>Objetivo diario</span>
+            <strong>{formatNumber(target.calories)} kcal</strong>
+          </div>
+          <div className="actual-total">
+            <span>Plan actual</span>
+            <strong>~{formatNumber(dailyNutrition.calories)} kcal</strong>
+          </div>
+        </div>
+        <NutritionFields legend="Objetivo diario" nutrition={target} update={updateTarget} />
+      </section>
+
+      <div className="section-heading">
+        <span>Comidas</span>
+        <strong>{meals.length}</strong>
+      </div>
+
       <div className="plan-list">
         {meals.map((meal) => {
           const expanded = expandedMealId === meal.id
-          const options = getMealOptions(meal)
-          const selectedOption = options.find((option) => option.id === selectedOptionId) ?? options[0]
-          const optionId = meal.options?.length ? selectedOption.id : undefined
-          const ingredients = selectedOption.ingredients
-          const summary = meal.options?.length
-            ? `${options.length} ${options.length === 1 ? 'opción' : 'opciones'} · ${formatCalorieRange(mealCalorieRange(meal))}`
-            : `${ingredients.length} ingredientes · ${formatNumber(optionCalories(selectedOption))} kcal`
-
-          const toggleExpanded = () => {
-            if (expanded) {
-              setExpandedMealId('')
-              setSelectedOptionId('')
-              return
-            }
-
-            setExpandedMealId(meal.id)
-            setSelectedOptionId(options[0].id)
-          }
-
           return (
             <article className={expanded ? 'surface plan-card expanded' : 'surface plan-card'} key={meal.id}>
               <div className="plan-card-head">
-                <button className="plan-card-summary" type="button" onClick={toggleExpanded}>
+                <button
+                  aria-expanded={expanded}
+                  className="plan-card-summary"
+                  type="button"
+                  onClick={() => setExpandedMealId(expanded ? '' : meal.id)}
+                >
                   <span>{meal.slot || 'Comida'}</span>
                   <strong>{meal.name}</strong>
-                  <small>{summary}</small>
+                  <small>{meal.ingredients.length} ingredientes · ~{formatNumber(meal.nutrition.calories)} kcal</small>
                 </button>
                 <button
-                  aria-label={expanded ? 'Comprimir comida' : 'Editar comida'}
+                  aria-label={expanded ? `Cerrar edición de ${meal.name}` : `Editar ${meal.name}`}
                   className="icon-button flat"
                   type="button"
-                  onClick={toggleExpanded}
+                  onClick={() => setExpandedMealId(expanded ? '' : meal.id)}
                 >
                   {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                 </button>
               </div>
 
+              {!expanded && <NutritionChips nutrition={meal.nutrition} />}
+
               {expanded && (
                 <div className="plan-card-editor">
-                  <div className="field-stack">
+                  <div className="field-stack meal-fields">
                     <label>
                       <span>Comida</span>
                       <input value={meal.name} onChange={(event) => updateMeal(meal.id, { name: event.target.value })} />
                     </label>
                     <label>
-                      <span>Horario</span>
+                      <span>Descripción</span>
                       <input value={meal.slot} onChange={(event) => updateMeal(meal.id, { slot: event.target.value })} />
                     </label>
                   </div>
 
-                  {meal.options?.length ? (
-                    <>
-                      <div className="meal-option-editor-head">
-                        <label className="meal-option-select">
-                          <span>Opción</span>
-                          <select value={selectedOption.id} onChange={(event) => setSelectedOptionId(event.target.value)}>
-                            {options.map((option) => (
-                              <option key={option.id} value={option.id}>
-                                {option.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <div>
-                          <button
-                            aria-label="Agregar opción"
-                            className="icon-button flat"
-                            type="button"
-                            onClick={() => setSelectedOptionId(addMealOption(meal.id))}
-                          >
-                            <Plus size={17} />
-                          </button>
-                          <button
-                            aria-label="Eliminar opción"
-                            className="icon-button flat danger-text"
-                            disabled={options.length === 1}
-                            type="button"
-                            onClick={() => {
-                              const currentIndex = options.findIndex((option) => option.id === selectedOption.id)
-                              const fallback = options[currentIndex === 0 ? 1 : currentIndex - 1]
-                              deleteMealOption(meal.id, selectedOption.id)
-                              setSelectedOptionId(fallback?.id ?? '')
-                            }}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
+                  <NutritionFields
+                    legend="Nutrición aproximada"
+                    nutrition={meal.nutrition}
+                    update={(patch) => updateMealNutrition(meal.id, patch)}
+                  />
 
-                      <label className="meal-option-name">
-                        <span>Nombre de la opción</span>
-                        <input
-                          value={selectedOption.name}
-                          onChange={(event) => updateMealOption(meal.id, selectedOption.id, { name: event.target.value })}
-                        />
-                      </label>
-                    </>
-                  ) : (
-                    <button
-                      className="secondary-button add-option-button"
-                      type="button"
-                      onClick={() => {
-                        setSelectedOptionId(addMealOption(meal.id))
-                      }}
-                    >
-                      <Plus size={16} />
-                      Agregar otra opción
-                    </button>
-                  )}
-
-                  <button
-                    className="food-lookup-button"
-                    type="button"
-                    onClick={() => openFoodFinder({ target: 'meal', initialMode: 'search', mealId: meal.id, optionId })}
-                  >
-                    <Search size={18} />
-                    <span>
-                      <strong>Buscar o escanear alimento</strong>
-                      <small>Calorias calculadas por porcion</small>
-                    </span>
-                    <ChevronRight size={18} />
-                  </button>
+                  <div className="editor-label">
+                    <span>Ingredientes</span>
+                    <strong>{meal.ingredients.length}</strong>
+                  </div>
 
                   <div className="ingredient-editor-list">
-                    {ingredients.map((ingredient) => (
+                    {meal.ingredients.map((ingredient) => (
                       <div className="ingredient-editor" key={ingredient.id}>
                         <input
-                          aria-label="Ingrediente"
+                          aria-label={`Ingrediente de ${meal.name}`}
                           value={ingredient.name}
-                          onChange={(event) => updateIngredient(meal.id, optionId, ingredient.id, { name: event.target.value })}
+                          onChange={(event) => updateIngredient(meal.id, ingredient.id, { name: event.target.value })}
                         />
                         <input
-                          aria-label="Cantidad"
+                          aria-label={`Cantidad de ${ingredient.name}`}
                           value={ingredient.amount}
-                          onChange={(event) => updateIngredient(meal.id, optionId, ingredient.id, { amount: event.target.value })}
-                        />
-                        <input
-                          aria-label="Calorias"
-                          inputMode="decimal"
-                          min="0"
-                          type="number"
-                          value={ingredient.calories}
-                          onFocus={(event) => event.currentTarget.select()}
-                          onChange={(event) =>
-                            updateIngredient(meal.id, optionId, ingredient.id, {
-                              calories: Math.max(0, Number(event.target.value)),
-                            })
-                          }
+                          onChange={(event) => updateIngredient(meal.id, ingredient.id, { amount: event.target.value })}
                         />
                         <button
-                          aria-label="Eliminar ingrediente"
+                          aria-label={`Eliminar ${ingredient.name}`}
                           className="icon-button tiny"
-                          disabled={ingredients.length === 1}
+                          disabled={meal.ingredients.length === 1}
                           type="button"
-                          onClick={() => deleteIngredient(meal.id, optionId, ingredient.id)}
+                          onClick={() => deleteIngredient(meal.id, ingredient.id)}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -2299,31 +1212,23 @@ function PlanView({
                   </div>
 
                   <div className="plan-card-footer">
-                    <button className="secondary-button" type="button" onClick={() => addIngredient(meal.id, optionId)}>
+                    <button className="secondary-button" type="button" onClick={() => addIngredient(meal.id)}>
                       <Plus size={16} />
-                      Manual
+                      Ingrediente
                     </button>
                     <div>
                       <button
-                        aria-label="Eliminar comida"
+                        aria-label={`Eliminar ${meal.name}`}
                         className="icon-button danger"
                         type="button"
                         onClick={() => {
                           deleteMeal(meal.id)
                           setExpandedMealId('')
-                          setSelectedOptionId('')
                         }}
                       >
                         <Trash2 size={17} />
                       </button>
-                      <button
-                        className="primary-button compact"
-                        type="button"
-                        onClick={() => {
-                          setExpandedMealId('')
-                          setSelectedOptionId('')
-                        }}
-                      >
+                      <button className="primary-button compact" type="button" onClick={() => setExpandedMealId('')}>
                         Listo
                       </button>
                     </div>
@@ -2334,6 +1239,39 @@ function PlanView({
           )
         })}
       </div>
+
+      <section className="surface notes-card">
+        <div className="notes-head">
+          <div>
+            <span>Indicaciones</span>
+            <strong>Notas del plan</strong>
+          </div>
+          <button aria-label="Agregar indicación" className="icon-button flat" type="button" onClick={addNote}>
+            <Plus size={18} />
+          </button>
+        </div>
+        <div className="notes-list">
+          {notes.map((note, index) => (
+            <div className="note-editor" key={`${index}-${notes.length}`}>
+              <textarea
+                aria-label={`Indicación ${index + 1}`}
+                rows={2}
+                value={note}
+                onChange={(event) => updateNote(index, event.target.value)}
+              />
+              <button
+                aria-label={`Eliminar indicación ${index + 1}`}
+                className="icon-button tiny"
+                type="button"
+                onClick={() => deleteNote(index)}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ))}
+          {!notes.length && <p className="empty-copy">Sin indicaciones adicionales.</p>}
+        </div>
+      </section>
     </section>
   )
 }
