@@ -1,4 +1,4 @@
-const CACHE_NAME = 'keep-slopping-v12'
+const CACHE_NAME = 'keep-slopping-v13'
 const SCOPE = self.registration.scope
 const CORE_ASSETS = [
   SCOPE,

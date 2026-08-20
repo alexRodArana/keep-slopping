@@ -5,7 +5,6 @@ import type { Meal, MealSession } from './types'
 const meal: Meal = {
   id: 'breakfast',
   name: 'Desayuno',
-  slot: 'ligero',
   ingredients: [
     { id: 'oats', name: 'Avena', amount: '50 g' },
     { id: 'whey', name: 'Proteína whey', amount: '1 scoop' },

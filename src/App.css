@@ -1,9 +1,11 @@
 .app-shell {
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snappy: cubic-bezier(0.2, 0.8, 0.2, 1);
+
   min-height: 100svh;
   color: var(--ink);
-  background:
-    radial-gradient(circle at 12% -8%, color-mix(in srgb, var(--brand) 10%, transparent), transparent 34rem),
-    var(--bg);
+  background: var(--bg);
+  isolation: isolate;
 }
 
 button,
@@ -52,10 +54,10 @@ textarea:focus {
 }
 
 .surface {
-  border: 1px solid var(--line);
-  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+  border-radius: 8px;
   background: var(--surface);
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow);
 }
 
 .app-header {
@@ -265,52 +267,64 @@ textarea:focus {
 }
 
 .tabs-wrap {
-  position: sticky;
-  z-index: 30;
-  top: 76px;
-  padding: 12px max(22px, calc((100vw - 1080px) / 2)) 0;
-  background: linear-gradient(var(--bg) 70%, transparent);
+  display: flex;
+  justify-content: center;
+  width: 100%;
 }
 
 .tabs {
-  display: grid;
-  width: min(380px, 100%);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: calc(100% - 24px);
   gap: 5px;
+  margin: 16px 12px 0;
   padding: 5px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
+  border-radius: 18px;
   background: var(--segmented);
+  box-shadow: 0 5px 18px rgba(22, 24, 29, 0.04);
+  animation: navigation-in 600ms 80ms var(--ease-smooth) both;
 }
 
 .tab {
   display: inline-flex;
+  min-width: 120px;
   min-height: 42px;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border-radius: 10px;
+  padding: 0 17px;
+  border-radius: 14px;
   color: var(--muted);
-  font-size: 0.84rem;
-  font-weight: 750;
+  font-size: 13px;
+  font-weight: 700;
   background: transparent;
-  transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition: color 240ms ease, background 320ms var(--ease-smooth), box-shadow 320ms var(--ease-smooth), transform 320ms var(--ease-smooth);
 }
 
 .tab.active {
-  color: var(--ink);
-  background: var(--surface);
-  box-shadow: 0 2px 10px rgba(15, 20, 26, 0.08);
+  color: var(--on-brand);
+  background: var(--brand);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--brand) 22%, transparent);
 }
 
 .tab.active svg {
-  color: var(--brand-ink);
+  color: currentColor;
+  transform: scale(1.08);
 }
 
 .main {
-  width: min(1080px, 100%);
+  width: min(760px, calc(100% - 36px));
   margin: 0 auto;
-  padding: 22px 22px 64px;
+  padding: 30px 0 52px;
+}
+
+.main-today {
+  display: grid;
+  align-content: center;
+  min-height: calc(100svh - 176px);
 }
 
 .sync-panel {
@@ -402,19 +416,18 @@ textarea:focus {
 
 .today-view,
 .plan-view {
-  animation: enter 300ms ease both;
+  display: grid;
+  gap: 14px;
+  animation: enter 520ms var(--ease-smooth) both;
 }
 
-.today-title,
 .plan-head {
   margin-bottom: 18px;
 }
 
-.today-title > span,
 .plan-head > div > span,
 .section-heading > span,
-.target-card-head span,
-.notes-head > div > span {
+.target-card-head span {
   color: var(--brand-ink);
   font-size: 0.72rem;
   font-weight: 800;
@@ -422,7 +435,6 @@ textarea:focus {
   text-transform: uppercase;
 }
 
-.today-title h1,
 .plan-head h1 {
   margin-top: 3px;
   font-size: clamp(1.7rem, 4vw, 2.35rem);
@@ -431,43 +443,81 @@ textarea:focus {
   line-height: 1.08;
 }
 
-.today-title p,
 .plan-head p {
   margin-top: 7px;
   color: var(--muted);
   font-size: 0.86rem;
 }
 
+.today-hero-copy {
+  display: grid;
+  width: min(700px, 100%);
+  min-height: 146px;
+  align-content: center;
+  gap: 8px;
+  margin: 0 auto 2px;
+  text-align: center;
+}
+
+.today-hero-copy > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.hero-phrase {
+  display: flex;
+  min-height: 104px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 6px;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 42px;
+  font-weight: 760;
+  line-height: 1.08;
+  text-align: center;
+  text-wrap: balance;
+  animation: phrase-in 720ms var(--ease-smooth) both;
+}
+
 .hero-panel {
-  padding: 18px;
-  border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--line));
-  border-radius: 20px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--brand) 9%, var(--surface)), var(--surface) 58%);
-  box-shadow: var(--shadow);
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .hero-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 9px;
 }
 
 .metric-card {
   display: grid;
   min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 1px 8px;
+  gap: 5px;
   padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  animation: card-in 520ms var(--ease-smooth) both;
+}
+
+.metric-card:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.metric-card:nth-child(3) {
+  animation-delay: 90ms;
 }
 
 .metric-card svg {
-  grid-row: 1 / 3;
-  color: var(--brand-ink);
+  color: var(--brand);
 }
 
 .metric-card span {
@@ -480,33 +530,17 @@ textarea:focus {
 }
 
 .metric-card strong {
-  overflow: hidden;
-  font-size: 0.86rem;
-  font-weight: 820;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.progress-copy {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 15px;
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 750;
-}
-
-.progress-copy strong {
-  color: var(--brand-ink);
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 740;
 }
 
 .day-progress {
   height: 7px;
-  margin-top: 7px;
   overflow: hidden;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--line-strong) 70%, transparent);
+  background: color-mix(in srgb, var(--brand) 11%, var(--field));
 }
 
 .day-progress span {
@@ -514,8 +548,14 @@ textarea:focus {
   width: 0;
   height: 100%;
   border-radius: inherit;
-  background: var(--brand);
-  transition: width 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--brand) 72%, var(--surface)),
+    var(--brand),
+    color-mix(in srgb, var(--brand) 84%, white)
+  );
+  box-shadow: 0 0 14px color-mix(in srgb, var(--brand) 28%, transparent);
+  transition: width 500ms var(--ease-smooth);
 }
 
 .creatine-card {
@@ -525,15 +565,14 @@ textarea:focus {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  margin: 14px 0 18px;
-  padding: 13px 16px;
-  border: 1px solid var(--line);
-  border-radius: 17px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
+  border-radius: 8px;
   color: var(--ink);
   text-align: left;
   background: var(--surface);
   box-shadow: var(--shadow-soft);
-  transition: border-color 180ms ease, background 180ms ease, transform 160ms ease;
+  transition: background 300ms var(--ease-smooth), border-color 240ms ease, box-shadow 320ms var(--ease-smooth), color 240ms ease, transform 320ms var(--ease-smooth);
 }
 
 .creatine-card:hover {
@@ -541,8 +580,11 @@ textarea:focus {
 }
 
 .creatine-card.complete {
-  border-color: color-mix(in srgb, var(--brand) 42%, var(--line));
-  background: color-mix(in srgb, var(--brand) 8%, var(--surface));
+  border-color: transparent;
+  color: var(--on-brand);
+  background: var(--brand);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--brand) 18%, transparent);
+  animation: completed-in 360ms var(--ease-smooth) both;
 }
 
 .check-icon,
@@ -586,23 +628,34 @@ textarea:focus {
 }
 
 .creatine-card.complete em {
-  color: var(--brand-ink);
+  color: var(--on-brand);
+}
+
+.creatine-card.complete strong,
+.creatine-card.complete small {
+  color: var(--on-brand);
+}
+
+.creatine-card.complete .check-icon,
+.meal-checklist.complete .meal-master-check {
+  border-color: transparent;
+  color: var(--brand);
+  background: var(--on-brand);
 }
 
 .meal-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 16px;
+  gap: 10px;
 }
 
 .meal-checklist {
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+  border-radius: 8px;
   background: var(--surface);
-  box-shadow: var(--shadow-soft);
-  transition: border-color 180ms ease, box-shadow 180ms ease;
+  box-shadow: var(--shadow);
+  animation: card-in 480ms var(--ease-smooth) both;
+  transition: border-color 280ms ease, box-shadow 360ms var(--ease-smooth), transform 360ms var(--ease-smooth);
 }
 
 .meal-checklist:hover {
@@ -610,8 +663,10 @@ textarea:focus {
 }
 
 .meal-checklist.complete {
-  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
-  box-shadow: 0 12px 34px color-mix(in srgb, var(--brand) 10%, transparent);
+  border-color: transparent;
+  color: var(--on-brand);
+  background: var(--brand);
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--brand) 20%, transparent);
 }
 
 .meal-checklist-head {
@@ -638,28 +693,12 @@ textarea:focus {
   gap: 1px;
 }
 
-.meal-title-copy > span {
-  color: var(--brand-ink);
-  font-size: 0.65rem;
-  font-weight: 820;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
 .meal-title-copy h2 {
   overflow: hidden;
-  font-size: 1.12rem;
-  font-weight: 820;
-  letter-spacing: -0.03em;
+  font-size: 19px;
+  font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.meal-title-copy small,
-.meal-calories small {
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 650;
 }
 
 .meal-calories {
@@ -694,6 +733,35 @@ textarea:focus {
 .nutrition-chips strong {
   color: var(--ink-soft);
   font-weight: 850;
+}
+
+.meal-checklist.complete .meal-title-copy h2,
+.meal-checklist.complete .meal-calories strong,
+.meal-checklist.complete .nutrition-chips span,
+.meal-checklist.complete .nutrition-chips strong,
+.meal-checklist.complete .ingredient-check,
+.meal-checklist.complete .ingredient-check strong,
+.meal-checklist.complete .ingredient-check small {
+  color: var(--on-brand);
+}
+
+.meal-checklist.complete .nutrition-chips span,
+.meal-checklist.complete .ingredient-checklist,
+.meal-checklist.complete .ingredient-check {
+  border-color: color-mix(in srgb, var(--on-brand) 24%, transparent);
+}
+
+.meal-checklist.complete .nutrition-chips span {
+  background: color-mix(in srgb, var(--on-brand) 12%, transparent);
+}
+
+.meal-checklist.complete .ingredient-check:hover {
+  background: color-mix(in srgb, var(--on-brand) 9%, transparent);
+}
+
+.meal-checklist.complete .ingredient-check.checked strong {
+  color: color-mix(in srgb, var(--on-brand) 78%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--on-brand) 55%, transparent);
 }
 
 .ingredient-checklist {
@@ -966,6 +1034,10 @@ textarea:focus {
   gap: 10px;
 }
 
+.field-stack.single-field {
+  grid-template-columns: 1fr;
+}
+
 .editor-label {
   display: flex;
   align-items: center;
@@ -1010,48 +1082,6 @@ textarea:focus {
   gap: 8px;
 }
 
-.notes-card {
-  margin-top: 20px;
-  padding: 18px;
-  box-shadow: none;
-}
-
-.notes-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 13px;
-}
-
-.notes-head > div {
-  display: grid;
-  gap: 2px;
-}
-
-.notes-head > div > strong {
-  font-size: 1rem;
-  font-weight: 820;
-}
-
-.notes-list {
-  display: grid;
-  gap: 8px;
-}
-
-.note-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
-}
-
-.empty-copy {
-  padding: 8px 0;
-  color: var(--muted);
-  font-size: 0.76rem;
-}
-
 @keyframes enter {
   from {
     opacity: 0;
@@ -1060,6 +1090,61 @@ textarea:focus {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes navigation-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes phrase-in {
+  from {
+    opacity: 0;
+    filter: blur(12px);
+    transform: translateY(18px) scale(0.975);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes completed-in {
+  from {
+    transform: scale(0.99);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes dock-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 18px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
   }
 }
 
@@ -1141,40 +1226,53 @@ textarea:focus {
   }
 
   .tabs-wrap {
-    position: fixed;
-    z-index: 50;
-    top: auto;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    padding: 8px max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
-    border-top: 1px solid var(--line);
-    background: var(--header);
-    backdrop-filter: blur(18px) saturate(150%);
-    -webkit-backdrop-filter: blur(18px) saturate(150%);
-  }
-
-  .tabs {
-    width: 100%;
+    position: static;
+    padding: 0;
     border: 0;
     background: transparent;
   }
 
-  .tab {
-    min-height: 51px;
-    flex-direction: column;
-    gap: 2px;
-    border-radius: 12px;
-    font-size: 0.65rem;
+  .tabs {
+    position: fixed;
+    z-index: 60;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    left: 50%;
+    display: grid;
+    width: min(390px, calc(100% - 24px));
+    max-width: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    margin: 0;
+    padding: 6px;
+    overflow: visible;
+    border: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
+    border-radius: 22px;
+    background: color-mix(in srgb, var(--surface-raised) 90%, transparent);
+    box-shadow: var(--shadow-float);
+    transform: translateX(-50%);
+    backdrop-filter: blur(24px) saturate(1.35);
+    -webkit-backdrop-filter: blur(24px) saturate(1.35);
+    animation: dock-in 640ms 120ms var(--ease-smooth) both;
   }
 
-  .tab.active {
-    background: color-mix(in srgb, var(--brand) 10%, var(--surface));
-    box-shadow: none;
+  .tab {
+    min-width: 0;
+    min-height: 56px;
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 3px;
+    border-radius: 17px;
+    font-size: 10px;
+    line-height: 1.1;
   }
 
   .main {
-    padding: 14px 14px calc(98px + env(safe-area-inset-bottom));
+    width: 100%;
+    padding: 16px 12px calc(104px + env(safe-area-inset-bottom));
+  }
+
+  .main-today {
+    min-height: calc(100svh - 164px - env(safe-area-inset-bottom));
   }
 
   .sync-panel.muted {
@@ -1193,32 +1291,35 @@ textarea:focus {
     grid-column: 1 / -1;
   }
 
-  .today-title,
   .plan-head {
     margin-bottom: 14px;
   }
 
-  .today-title h1,
   .plan-head h1 {
     font-size: 1.7rem;
   }
 
-  .hero-panel {
-    padding: 13px;
-    border-radius: 17px;
+  .today-hero-copy {
+    width: min(100%, 380px);
+    min-height: 164px;
+    margin-top: 2px;
+  }
+
+  .today-hero-copy > span {
+    font-size: 11px;
+  }
+
+  .hero-phrase {
+    min-height: 122px;
+    font-size: 31px;
+    line-height: 1.12;
   }
 
   .hero-stats {
-    gap: 6px;
+    gap: 7px;
   }
 
   .metric-card {
-    display: flex;
-    min-height: 72px;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 1px;
     padding: 10px;
   }
 
@@ -1230,17 +1331,16 @@ textarea:focus {
 
   .metric-card span {
     width: 100%;
-    font-size: 0.58rem;
+    font-size: 0.64rem;
   }
 
   .metric-card strong {
     width: 100%;
-    font-size: 0.74rem;
+    font-size: 12px;
   }
 
   .creatine-card {
-    margin: 11px 0 13px;
-    border-radius: 15px;
+    border-radius: 8px;
   }
 
   .meal-list {
@@ -1248,7 +1348,7 @@ textarea:focus {
   }
 
   .meal-checklist {
-    border-radius: 17px;
+    border-radius: 8px;
   }
 
   .meal-checklist-head {
@@ -1266,10 +1366,9 @@ textarea:focus {
     padding: 9px 13px;
   }
 
-  .target-card,
-  .notes-card {
+  .target-card {
     padding: 14px;
-    border-radius: 16px;
+    border-radius: 8px;
   }
 
   .nutrition-fields > div {
@@ -1277,7 +1376,7 @@ textarea:focus {
   }
 
   .plan-card {
-    border-radius: 16px;
+    border-radius: 8px;
   }
 
   .plan-card-editor {
@@ -1319,18 +1418,6 @@ textarea:focus {
 
   .accent-button {
     display: none;
-  }
-
-  .hero-stats {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .metric-card:first-child {
-    grid-column: 1 / -1;
-  }
-
-  .metric-card:first-child {
-    min-height: 58px;
   }
 
   .target-card-head {

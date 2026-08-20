@@ -9,18 +9,10 @@ export const defaultTarget: PlanTarget = {
   fat: 60,
 }
 
-export const defaultNotes = [
-  'Los valores son aproximados y pueden variar según la marca de whey, leche, pan, hummus, pasta y crema de cacahuate.',
-  'La pasta se pesa en seco y la pechuga de pollo en crudo para mantener consistencia.',
-  'Las verduras pueden ser la mezcla de brócoli, coliflor y zanahoria que ya tienes.',
-  'La distribución está pensada para que el desayuno sea la comida más ligera y la cena la más abundante.',
-]
-
 export const defaultMeals: Meal[] = [
   {
     id: 'breakfast',
     name: 'Desayuno',
-    slot: 'ligero',
     ingredients: [
       { id: 'breakfast-oats', name: 'Avena', amount: '50 g' },
       { id: 'breakfast-whey', name: 'Proteína whey', amount: '1 scoop' },
@@ -34,7 +26,6 @@ export const defaultMeals: Meal[] = [
   {
     id: 'lunch',
     name: 'Comida',
-    slot: 'moderada',
     ingredients: [
       { id: 'lunch-pasta', name: 'Pasta (peso en seco)', amount: '100 g' },
       { id: 'lunch-chicken', name: 'Pechuga de pollo (peso en crudo)', amount: '80 g' },
@@ -46,7 +37,6 @@ export const defaultMeals: Meal[] = [
   {
     id: 'snack',
     name: 'Colación',
-    slot: '',
     ingredients: [
       { id: 'snack-bread', name: 'Pan multigrain', amount: '130 g' },
       { id: 'snack-peanut-butter', name: 'Crema de cacahuate', amount: '30 g' },
@@ -56,7 +46,6 @@ export const defaultMeals: Meal[] = [
   {
     id: 'dinner',
     name: 'Cena',
-    slot: 'comida fuerte',
     ingredients: [
       { id: 'dinner-pasta', name: 'Pasta (peso en seco)', amount: '175 g' },
       { id: 'dinner-chicken', name: 'Pechuga de pollo (peso en crudo)', amount: '45 g' },
@@ -70,7 +59,6 @@ export const defaultMeals: Meal[] = [
 export const initialState: AppState = {
   planVersion: CURRENT_PLAN_VERSION,
   target: defaultTarget,
-  notes: defaultNotes,
   creatineDates: [],
   meals: defaultMeals,
   sessions: [],

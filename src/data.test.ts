@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CURRENT_PLAN_VERSION, defaultMeals, defaultNotes, defaultTarget, initialState } from './data'
+import { CURRENT_PLAN_VERSION, defaultMeals, defaultTarget, initialState } from './data'
 
 describe('2600 kcal meal plan', () => {
   it('contains the exact target, meals, ingredients, and nutrition from the PDF', () => {
@@ -9,7 +9,6 @@ describe('2600 kcal meal plan', () => {
       {
         id: 'breakfast',
         name: 'Desayuno',
-        slot: 'ligero',
         ingredients: [
           { id: 'breakfast-oats', name: 'Avena', amount: '50 g' },
           { id: 'breakfast-whey', name: 'Proteína whey', amount: '1 scoop' },
@@ -23,7 +22,6 @@ describe('2600 kcal meal plan', () => {
       {
         id: 'lunch',
         name: 'Comida',
-        slot: 'moderada',
         ingredients: [
           { id: 'lunch-pasta', name: 'Pasta (peso en seco)', amount: '100 g' },
           { id: 'lunch-chicken', name: 'Pechuga de pollo (peso en crudo)', amount: '80 g' },
@@ -35,7 +33,6 @@ describe('2600 kcal meal plan', () => {
       {
         id: 'snack',
         name: 'Colación',
-        slot: '',
         ingredients: [
           { id: 'snack-bread', name: 'Pan multigrain', amount: '130 g' },
           { id: 'snack-peanut-butter', name: 'Crema de cacahuate', amount: '30 g' },
@@ -45,7 +42,6 @@ describe('2600 kcal meal plan', () => {
       {
         id: 'dinner',
         name: 'Cena',
-        slot: 'comida fuerte',
         ingredients: [
           { id: 'dinner-pasta', name: 'Pasta (peso en seco)', amount: '175 g' },
           { id: 'dinner-chicken', name: 'Pechuga de pollo (peso en crudo)', amount: '45 g' },
@@ -55,16 +51,9 @@ describe('2600 kcal meal plan', () => {
         nutrition: { calories: 990, protein: 43, carbs: 155, fat: 22 },
       },
     ])
-    expect(defaultNotes).toEqual([
-      'Los valores son aproximados y pueden variar según la marca de whey, leche, pan, hummus, pasta y crema de cacahuate.',
-      'La pasta se pesa en seco y la pechuga de pollo en crudo para mantener consistencia.',
-      'Las verduras pueden ser la mezcla de brócoli, coliflor y zanahoria que ya tienes.',
-      'La distribución está pensada para que el desayuno sea la comida más ligera y la cena la más abundante.',
-    ])
     expect(initialState).toEqual({
       planVersion: 2,
       target: defaultTarget,
-      notes: defaultNotes,
       creatineDates: [],
       meals: defaultMeals,
       sessions: [],

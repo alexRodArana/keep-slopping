@@ -1,4 +1,4 @@
-import { CURRENT_PLAN_VERSION, defaultMeals, defaultNotes, defaultTarget } from './data'
+import { CURRENT_PLAN_VERSION, defaultMeals, defaultTarget } from './data'
 import type { AppState, Ingredient, Meal, MealSession, Nutrition } from './types'
 
 const STORAGE_KEY = 'keep-slopping-state-v1'
@@ -23,7 +23,6 @@ const cloneMeals = (meals: Meal[]): Meal[] =>
 const freshInitialState = (creatineDates: string[] = []): AppState => ({
   planVersion: CURRENT_PLAN_VERSION,
   target: cloneNutrition(defaultTarget),
-  notes: [...defaultNotes],
   creatineDates,
   meals: cloneMeals(defaultMeals),
   sessions: [],
@@ -56,7 +55,6 @@ const normalizeMeals = (value: unknown): Meal[] => {
   return value.filter(isRecord).map((meal, mealIndex) => ({
     id: String(meal.id ?? `meal-${mealIndex + 1}`),
     name: String(meal.name ?? `Comida ${mealIndex + 1}`),
-    slot: String(meal.slot ?? ''),
     ingredients: Array.isArray(meal.ingredients)
       ? meal.ingredients.filter(isRecord).map(normalizeIngredient)
       : [],
@@ -140,7 +138,11 @@ export const requiresPlanMigration = (value: unknown) => {
 }
 
 export const hasLegacyStateKeys = (value: unknown) =>
-  isRecord(value) && ('foodLogs' in value || 'activeSession' in value)
+  isRecord(value) &&
+  ('foodLogs' in value ||
+    'activeSession' in value ||
+    'notes' in value ||
+    (Array.isArray(value.meals) && value.meals.some((meal) => isRecord(meal) && 'slot' in meal)))
 
 export const normalizeState = (value: unknown): AppState => {
   if (!isRecord(value)) {
@@ -159,9 +161,6 @@ export const normalizeState = (value: unknown): AppState => {
   return {
     planVersion: Math.max(CURRENT_PLAN_VERSION, rawVersion),
     target: normalizeNutrition(value.target, defaultTarget),
-    notes: Array.isArray(value.notes)
-      ? value.notes.filter((note): note is string => typeof note === 'string')
-      : [...defaultNotes],
     creatineDates,
     meals,
     sessions: normalizeMealSessions(normalizeSessions(value.sessions), meals),

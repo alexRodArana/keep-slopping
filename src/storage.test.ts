@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { defaultMeals, defaultNotes, defaultTarget } from './data'
-import { loadState, normalizeState, requiresPlanMigration } from './storage'
+import { defaultMeals, defaultTarget } from './data'
+import { hasLegacyStateKeys, loadState, normalizeState, requiresPlanMigration } from './storage'
 
 const STORAGE_KEY = 'keep-slopping-state-v1'
 
@@ -25,7 +25,6 @@ describe('state migration', () => {
     expect(normalizeState(legacyState)).toEqual({
       planVersion: 2,
       target: defaultTarget,
-      notes: defaultNotes,
       creatineDates: ['2026-08-06', '2026-08-04'],
       meals: defaultMeals,
       sessions: [],
@@ -55,7 +54,6 @@ describe('state migration', () => {
     expect(state).toEqual({
       planVersion: 2,
       target: { calories: 2500, protein: 150, carbs: 300, fat: 70 },
-      notes: [],
       creatineDates: [],
       meals: [],
       sessions: [],
@@ -66,7 +64,7 @@ describe('state migration', () => {
     const state = normalizeState({
       planVersion: 2,
       target: defaultTarget,
-      notes: defaultNotes,
+      notes: ['Indicación retirada'],
       creatineDates: [],
       meals: [
         {
@@ -91,6 +89,8 @@ describe('state migration', () => {
       ],
     })
 
+    expect(state).not.toHaveProperty('notes')
+    expect(state.meals[0]).not.toHaveProperty('slot')
     expect(state.meals[0].ingredients[0]).toEqual({ id: 'oats', name: 'Avena', amount: '50 g' })
     expect(state.sessions[0]).toEqual({
       id: 'session-1',
@@ -124,26 +124,63 @@ describe('state migration', () => {
     expect(persisted).not.toHaveProperty('activeSession')
   })
 
-  it('cleans legacy keys from a version 2 state without replacing its edits', () => {
+  it('detects removed top-level notes and nested meal descriptions as stale keys', () => {
+    expect(hasLegacyStateKeys({ planVersion: 2, notes: [] })).toBe(true)
+    expect(hasLegacyStateKeys({ planVersion: 2, meals: [{ slot: 'ligero' }] })).toBe(true)
+    expect(hasLegacyStateKeys({ planVersion: 2, meals: [{ name: 'Desayuno' }] })).toBe(false)
+  })
+
+  it('cleans removed fields from a version 2 state without replacing its meals or progress', () => {
+    const savedSession = {
+      id: 'custom-session',
+      mealId: 'custom-meal',
+      date: '2026-08-19',
+      startedAt: '2026-08-19T12:00:00.000Z',
+      endedAt: '2026-08-19T12:10:00.000Z',
+      checkedIngredientIds: ['custom-ingredient'],
+      completed: true,
+    }
+
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         planVersion: 2,
         target: { calories: 2500, protein: 150, carbs: 300, fat: 70 },
-        notes: [],
-        creatineDates: [],
-        meals: [],
-        sessions: [],
-        foodLogs: [],
-        activeSession: null,
+        notes: ['Indicación retirada'],
+        creatineDates: ['2026-08-18'],
+        meals: [
+          {
+            id: 'custom-meal',
+            name: 'Comida editada',
+            slot: 'descripción retirada',
+            ingredients: [{ id: 'custom-ingredient', name: 'Ingrediente editado', amount: '123 g' }],
+            nutrition: { calories: 625, protein: 40, carbs: 80, fat: 15 },
+          },
+        ],
+        sessions: [savedSession],
       }),
     )
 
     const state = loadState()
     const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
 
-    expect(state).toMatchObject({ target: { calories: 2500 }, notes: [], meals: [] })
+    expect(state).toEqual({
+      planVersion: 2,
+      target: { calories: 2500, protein: 150, carbs: 300, fat: 70 },
+      creatineDates: ['2026-08-18'],
+      meals: [
+        {
+          id: 'custom-meal',
+          name: 'Comida editada',
+          ingredients: [{ id: 'custom-ingredient', name: 'Ingrediente editado', amount: '123 g' }],
+          nutrition: { calories: 625, protein: 40, carbs: 80, fat: 15 },
+        },
+      ],
+      sessions: [savedSession],
+    })
     expect(persisted).toEqual(state)
+    expect(persisted).not.toHaveProperty('notes')
+    expect(persisted.meals[0]).not.toHaveProperty('slot')
   })
 
   it('keeps the migrated state in memory when local writeback fails', () => {

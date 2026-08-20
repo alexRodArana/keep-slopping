@@ -22,7 +22,6 @@ export type PlanTarget = Nutrition
 export type Meal = {
   id: string
   name: string
-  slot: string
   ingredients: Ingredient[]
   nutrition: Nutrition
 }
@@ -40,7 +39,6 @@ export type MealSession = {
 export type AppState = {
   planVersion: number
   target: PlanTarget
-  notes: string[]
   creatineDates: string[]
   meals: Meal[]
   sessions: MealSession[]

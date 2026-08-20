@@ -32,7 +32,6 @@ import {
 import './App.css'
 import { initialState } from './data'
 import {
-  formatDate,
   formatNumber,
   getLatestMealSession,
   isMealSessionComplete,
@@ -68,9 +67,19 @@ const accentOptions: AccentOption[] = [
   { key: 'rose', label: 'Rosa', color: '#be185d' },
 ]
 
+const foodPhrases = [
+  'Goy mode off. Meal prep Kosher.',
+  'Plan Judio: pesar, cocinar, cumplir.',
+  'Slopping Kosher, calorias bajo control.',
+  'Del antojo Goy al plato medido.',
+  'Cocina Kosher. Progreso limpio.',
+  'Que el Goy interior respete el plan.',
+  'Hoy toca precision Kosher en la cocina.',
+  'Comida medida, disciplina Judia.',
+]
+
 const defaultPlanSignature = JSON.stringify({
   target: initialState.target,
-  notes: initialState.notes,
   meals: initialState.meals,
 })
 
@@ -92,7 +101,7 @@ const hasUserData = (value: AppState) =>
   Boolean(
     value.creatineDates.length ||
       value.sessions.length ||
-      JSON.stringify({ target: value.target, notes: value.notes, meals: value.meals }) !== defaultPlanSignature,
+      JSON.stringify({ target: value.target, meals: value.meals }) !== defaultPlanSignature,
   )
 
 const getMeal = (meals: Meal[], mealId: string) => meals.find((meal) => meal.id === mealId)
@@ -124,9 +133,11 @@ function App() {
     return accentOptions.some((option) => option.key === storedAccent) ? (storedAccent as AccentColor) : 'green'
   })
   const [accentOpen, setAccentOpen] = useState(false)
+  const [foodPhraseIndex, setFoodPhraseIndex] = useState(() => Math.floor(Math.random() * foodPhrases.length))
 
   const today = todayIso()
   const currentAccent = accentOptions.find((option) => option.key === accent) ?? accentOptions[0]
+  const currentFoodPhrase = foodPhrases[foodPhraseIndex]
   const dailyNutrition = useMemo(() => sumNutrition(state.meals), [state.meals])
 
   const applyLoadedState = useCallback((savedState: AppState) => {
@@ -361,6 +372,14 @@ function App() {
     return () => window.clearInterval(interval)
   }, [syncCooldown])
 
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setFoodPhraseIndex((index) => (index + 1) % foodPhrases.length)
+    }, 5200)
+
+    return () => window.clearInterval(interval)
+  }, [])
+
   const requestSyncLink = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!syncEmail.trim() || !syncPassword || syncCooldown > 0) {
@@ -516,7 +535,6 @@ function App() {
         {
           id,
           name: 'Nueva comida',
-          slot: '',
           ingredients: [{ id: createId('ingredient'), name: 'Ingrediente', amount: '' }],
           nutrition: { calories: 0, protein: 0, carbs: 0, fat: 0 },
         },
@@ -579,25 +597,11 @@ function App() {
     })
   }
 
-  const updateNote = (index: number, value: string) => {
-    setState((current) => ({
-      ...current,
-      notes: current.notes.map((note, noteIndex) => (noteIndex === index ? value : note)),
-    }))
-  }
-
-  const addNote = () => {
-    setState((current) => ({ ...current, notes: [...current.notes, 'Nueva indicación'] }))
-  }
-
-  const deleteNote = (index: number) => {
-    setState((current) => ({ ...current, notes: current.notes.filter((_, noteIndex) => noteIndex !== index) }))
-  }
-
   const content =
     activeTab === 'today' ? (
       <TodayView
         creatineCompleted={state.creatineDates.includes(today)}
+        heroPhrase={currentFoodPhrase}
         meals={state.meals}
         sessions={state.sessions}
         target={state.target}
@@ -610,18 +614,14 @@ function App() {
       <PlanView
         addIngredient={addIngredient}
         addMeal={addMeal}
-        addNote={addNote}
         dailyNutrition={dailyNutrition}
         deleteIngredient={deleteIngredient}
         deleteMeal={deleteMeal}
-        deleteNote={deleteNote}
         meals={state.meals}
-        notes={state.notes}
         target={state.target}
         updateIngredient={updateIngredient}
         updateMeal={updateMeal}
         updateMealNutrition={updateMealNutrition}
-        updateNote={updateNote}
         updateTarget={updateTarget}
       />
     )
@@ -849,6 +849,7 @@ function MetricCard({ icon, label, value }: { icon: ReactNode; label: string; va
 
 function TodayView({
   creatineCompleted,
+  heroPhrase,
   meals,
   sessions,
   target,
@@ -858,6 +859,7 @@ function TodayView({
   toggleMeal,
 }: {
   creatineCompleted: boolean
+  heroPhrase: string
   meals: Meal[]
   sessions: MealSession[]
   target: Nutrition
@@ -880,10 +882,9 @@ function TodayView({
     const session = sessionsByMealId.get(meal.id)
     return Boolean(session && isMealSessionComplete(session, meal))
   }).length
-  const totalIngredients = meals.reduce((total, meal) => total + meal.ingredients.length, 0)
-  const checkedIngredients = meals.reduce((total, meal) => {
-    const checkedIds = new Set(sessionsByMealId.get(meal.id)?.checkedIngredientIds ?? [])
-    return total + meal.ingredients.filter((ingredient) => checkedIds.has(ingredient.id)).length
+  const completedCalories = meals.reduce((total, meal) => {
+    const session = sessionsByMealId.get(meal.id)
+    return total + (session && isMealSessionComplete(session, meal) ? meal.nutrition.calories : 0)
   }, 0)
   const completedTasks = completedMeals + (creatineCompleted ? 1 : 0)
   const totalTasks = meals.length + 1
@@ -891,21 +892,18 @@ function TodayView({
 
   return (
     <section className="today-view enter">
-      <div className="today-title">
-        <span>{formatDate(today)}</span>
-        <h1>Checklist de hoy</h1>
-        <p>Marca cada ingrediente a medida que completas el plan.</p>
+      <div className="today-hero-copy">
+        <span>Plan de hoy</span>
+        <h1 className="hero-phrase" key={heroPhrase}>
+          {heroPhrase}
+        </h1>
       </div>
 
       <section className="hero-panel" aria-label="Progreso del día">
         <div className="hero-stats">
           <MetricCard icon={<Flame size={18} />} label="Objetivo" value={`${formatNumber(target.calories)} kcal`} />
-          <MetricCard icon={<CheckCircle2 size={18} />} label="Comidas" value={`${completedMeals}/${meals.length}`} />
-          <MetricCard icon={<ListChecks size={18} />} label="Ingredientes" value={`${checkedIngredients}/${totalIngredients}`} />
-        </div>
-        <div className="progress-copy">
-          <span>Progreso diario</span>
-          <strong>{progress}%</strong>
+          <MetricCard icon={<CheckCircle2 size={18} />} label="Hechas" value={`${completedTasks}/${totalTasks}`} />
+          <MetricCard icon={<ChefHat size={18} />} label="Registrado" value={`${formatNumber(completedCalories)} kcal`} />
         </div>
         <div className="day-progress">
           <span style={{ width: `${progress}%` }} />
@@ -916,7 +914,7 @@ function TodayView({
         <span className="check-icon">{creatineCompleted ? <Check size={18} /> : <Circle size={18} />}</span>
         <span>
           <strong>Creatina</strong>
-          <small>Recordatorio diario</small>
+          <small>Tomar hoy</small>
         </span>
         <em>{creatineCompleted ? 'Hecho' : 'Pendiente'}</em>
       </button>
@@ -958,7 +956,6 @@ function MealChecklistCard({
   toggleMeal: (mealId: string) => void
 }) {
   const checkedIds = new Set(session?.checkedIngredientIds ?? [])
-  const checkedCount = meal.ingredients.filter((ingredient) => checkedIds.has(ingredient.id)).length
   const complete = Boolean(session && isMealSessionComplete(session, meal))
 
   return (
@@ -973,13 +970,10 @@ function MealChecklistCard({
           {complete ? <Check size={20} /> : <Circle size={20} />}
         </button>
         <div className="meal-title-copy">
-          <span>{meal.slot || 'Comida'}</span>
           <h2>{meal.name}</h2>
-          <small>{checkedCount}/{meal.ingredients.length} ingredientes</small>
         </div>
         <div className="meal-calories">
-          <strong>~{formatNumber(meal.nutrition.calories)}</strong>
-          <small>kcal</small>
+          <strong>~{formatNumber(meal.nutrition.calories)} kcal</strong>
         </div>
       </div>
 
@@ -1064,34 +1058,26 @@ function NutritionFields({
 function PlanView({
   addIngredient,
   addMeal,
-  addNote,
   dailyNutrition,
   deleteIngredient,
   deleteMeal,
-  deleteNote,
   meals,
-  notes,
   target,
   updateIngredient,
   updateMeal,
   updateMealNutrition,
-  updateNote,
   updateTarget,
 }: {
   addIngredient: (mealId: string) => void
   addMeal: () => string
-  addNote: () => void
   dailyNutrition: Nutrition
   deleteIngredient: (mealId: string, ingredientId: string) => void
   deleteMeal: (mealId: string) => void
-  deleteNote: (index: number) => void
   meals: Meal[]
-  notes: string[]
   target: Nutrition
   updateIngredient: (mealId: string, ingredientId: string, patch: Partial<Ingredient>) => void
   updateMeal: (mealId: string, patch: Partial<Meal>) => void
   updateMealNutrition: (mealId: string, patch: Partial<Nutrition>) => void
-  updateNote: (index: number, value: string) => void
   updateTarget: (patch: Partial<Nutrition>) => void
 }) {
   const [expandedMealId, setExpandedMealId] = useState('')
@@ -1145,9 +1131,8 @@ function PlanView({
                   type="button"
                   onClick={() => setExpandedMealId(expanded ? '' : meal.id)}
                 >
-                  <span>{meal.slot || 'Comida'}</span>
                   <strong>{meal.name}</strong>
-                  <small>{meal.ingredients.length} ingredientes · ~{formatNumber(meal.nutrition.calories)} kcal</small>
+                  <small>~{formatNumber(meal.nutrition.calories)} kcal</small>
                 </button>
                 <button
                   aria-label={expanded ? `Cerrar edición de ${meal.name}` : `Editar ${meal.name}`}
@@ -1163,14 +1148,10 @@ function PlanView({
 
               {expanded && (
                 <div className="plan-card-editor">
-                  <div className="field-stack meal-fields">
+                  <div className="field-stack meal-fields single-field">
                     <label>
                       <span>Comida</span>
                       <input value={meal.name} onChange={(event) => updateMeal(meal.id, { name: event.target.value })} />
-                    </label>
-                    <label>
-                      <span>Descripción</span>
-                      <input value={meal.slot} onChange={(event) => updateMeal(meal.id, { slot: event.target.value })} />
                     </label>
                   </div>
 
@@ -1239,39 +1220,6 @@ function PlanView({
           )
         })}
       </div>
-
-      <section className="surface notes-card">
-        <div className="notes-head">
-          <div>
-            <span>Indicaciones</span>
-            <strong>Notas del plan</strong>
-          </div>
-          <button aria-label="Agregar indicación" className="icon-button flat" type="button" onClick={addNote}>
-            <Plus size={18} />
-          </button>
-        </div>
-        <div className="notes-list">
-          {notes.map((note, index) => (
-            <div className="note-editor" key={`${index}-${notes.length}`}>
-              <textarea
-                aria-label={`Indicación ${index + 1}`}
-                rows={2}
-                value={note}
-                onChange={(event) => updateNote(index, event.target.value)}
-              />
-              <button
-                aria-label={`Eliminar indicación ${index + 1}`}
-                className="icon-button tiny"
-                type="button"
-                onClick={() => deleteNote(index)}
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
-          ))}
-          {!notes.length && <p className="empty-copy">Sin indicaciones adicionales.</p>}
-        </div>
-      </section>
     </section>
   )
 }

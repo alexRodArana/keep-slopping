@@ -177,9 +177,6 @@ export const saveRemoteState = async (state: AppState, previousState?: AppState)
   if (!previousState || state.target !== previousState.target) {
     patch.target = state.target
   }
-  if (!previousState || state.notes !== previousState.notes) {
-    patch.notes = state.notes
-  }
   if (!previousState || state.creatineDates !== previousState.creatineDates) {
     patch.creatineDates = state.creatineDates
   }
@@ -197,7 +194,7 @@ export const saveRemoteState = async (state: AppState, previousState?: AppState)
   const { error } = await supabase.rpc('merge_goy_app_state_section', {
     p_section_key: KEEP_SLOPPING_KEY,
     p_patch: patch,
-    p_remove_keys: ['foodLogs', 'activeSession'],
+    p_remove_keys: ['foodLogs', 'activeSession', 'notes'],
   })
 
   if (error) {
