@@ -5,10 +5,10 @@ import { sumNutrition } from './mealUtils'
 describe('meal nutrition', () => {
   it('sums the nutrition declared for every meal', () => {
     expect(sumNutrition(defaultMeals)).toEqual({
-      calories: 2588,
-      protein: 141,
-      carbs: 377,
-      fat: 60,
+      calories: 2608,
+      protein: 159.8,
+      carbs: 342.5,
+      fat: 65,
     })
   })
 

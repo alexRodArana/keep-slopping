@@ -9,21 +9,18 @@ describe('state migration', () => {
     localStorage.clear()
   })
 
-  it('replaces a legacy plan, clears its sessions, and preserves normalized creatine dates', () => {
-    const legacyState = {
-      planVersion: 1,
-      target: { calories: 1, protein: 1, carbs: 1, fat: 1 },
-      notes: ['Nota anterior'],
+  it('replaces the previous v2 plan, clears its sessions, and preserves normalized creatine dates', () => {
+    const previousPlanState = {
+      planVersion: 2,
+      target: { calories: 2600, protein: 140, carbs: 375, fat: 60 },
       creatineDates: ['2026-08-04', '2026-08-06', '2026-08-04', ''],
-      meals: [{ id: 'old', name: 'Plan anterior', slot: '', ingredients: [] }],
-      sessions: [{ id: 'old-session', mealId: 'old' }],
-      foodLogs: [{ id: 'old-food-log' }],
-      activeSession: { id: 'old-active-session' },
+      meals: [{ id: 'snack', name: 'Colación', ingredients: [] }],
+      sessions: [{ id: 'old-session', mealId: 'snack' }],
     }
 
-    expect(requiresPlanMigration(legacyState)).toBe(true)
-    expect(normalizeState(legacyState)).toEqual({
-      planVersion: 2,
+    expect(requiresPlanMigration(previousPlanState)).toBe(true)
+    expect(normalizeState(previousPlanState)).toEqual({
+      planVersion: 3,
       target: defaultTarget,
       creatineDates: ['2026-08-06', '2026-08-04'],
       meals: defaultMeals,
@@ -33,16 +30,16 @@ describe('state migration', () => {
 
   it('treats states without a plan version as legacy', () => {
     expect(normalizeState({ creatineDates: ['2026-08-04'], meals: [] })).toMatchObject({
-      planVersion: 2,
+      planVersion: 3,
       creatineDates: ['2026-08-04'],
       meals: defaultMeals,
       sessions: [],
     })
   })
 
-  it('preserves edits and an intentionally empty meal list in version 2', () => {
+  it('preserves edits and an intentionally empty meal list in version 3', () => {
     const state = normalizeState({
-      planVersion: 2,
+      planVersion: 3,
       target: { calories: 2500, protein: 150, carbs: 300, fat: 70 },
       notes: [],
       creatineDates: [],
@@ -52,7 +49,7 @@ describe('state migration', () => {
 
     expect(requiresPlanMigration(state)).toBe(false)
     expect(state).toEqual({
-      planVersion: 2,
+      planVersion: 3,
       target: { calories: 2500, protein: 150, carbs: 300, fat: 70 },
       creatineDates: [],
       meals: [],
@@ -60,9 +57,9 @@ describe('state migration', () => {
     })
   })
 
-  it('normalizes version 2 sessions against their meal ingredients', () => {
+  it('normalizes version 3 sessions against their meal ingredients', () => {
     const state = normalizeState({
-      planVersion: 2,
+      planVersion: 3,
       target: defaultTarget,
       notes: ['Indicación retirada'],
       creatineDates: [],
@@ -118,19 +115,19 @@ describe('state migration', () => {
     const state = loadState()
     const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
 
-    expect(state.planVersion).toBe(2)
+    expect(state.planVersion).toBe(3)
     expect(persisted).toEqual(state)
     expect(persisted).not.toHaveProperty('foodLogs')
     expect(persisted).not.toHaveProperty('activeSession')
   })
 
   it('detects removed top-level notes and nested meal descriptions as stale keys', () => {
-    expect(hasLegacyStateKeys({ planVersion: 2, notes: [] })).toBe(true)
-    expect(hasLegacyStateKeys({ planVersion: 2, meals: [{ slot: 'ligero' }] })).toBe(true)
-    expect(hasLegacyStateKeys({ planVersion: 2, meals: [{ name: 'Desayuno' }] })).toBe(false)
+    expect(hasLegacyStateKeys({ planVersion: 3, notes: [] })).toBe(true)
+    expect(hasLegacyStateKeys({ planVersion: 3, meals: [{ slot: 'ligero' }] })).toBe(true)
+    expect(hasLegacyStateKeys({ planVersion: 3, meals: [{ name: 'Desayuno' }] })).toBe(false)
   })
 
-  it('cleans removed fields from a version 2 state without replacing its meals or progress', () => {
+  it('cleans removed fields from a version 3 state without replacing its meals or progress', () => {
     const savedSession = {
       id: 'custom-session',
       mealId: 'custom-meal',
@@ -144,7 +141,7 @@ describe('state migration', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        planVersion: 2,
+        planVersion: 3,
         target: { calories: 2500, protein: 150, carbs: 300, fat: 70 },
         notes: ['Indicación retirada'],
         creatineDates: ['2026-08-18'],
@@ -165,7 +162,7 @@ describe('state migration', () => {
     const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
 
     expect(state).toEqual({
-      planVersion: 2,
+      planVersion: 3,
       target: { calories: 2500, protein: 150, carbs: 300, fat: 70 },
       creatineDates: ['2026-08-18'],
       meals: [

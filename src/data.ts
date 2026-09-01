@@ -1,12 +1,12 @@
 import type { AppState, Meal, PlanTarget } from './types'
 
-export const CURRENT_PLAN_VERSION = 2
+export const CURRENT_PLAN_VERSION = 3
 
 export const defaultTarget: PlanTarget = {
   calories: 2600,
-  protein: 140,
-  carbs: 375,
-  fat: 60,
+  protein: 160,
+  carbs: 343,
+  fat: 65,
 }
 
 export const defaultMeals: Meal[] = [
@@ -14,45 +14,34 @@ export const defaultMeals: Meal[] = [
     id: 'breakfast',
     name: 'Desayuno',
     ingredients: [
-      { id: 'breakfast-oats', name: 'Avena', amount: '50 g' },
-      { id: 'breakfast-whey', name: 'Proteína whey', amount: '1 scoop' },
-      { id: 'breakfast-milk', name: 'Leche', amount: '250 ml' },
-      { id: 'breakfast-blueberries', name: 'Blueberries', amount: '100 g' },
-      { id: 'breakfast-lys-syrup', name: 'Lys syrup', amount: '10 g' },
-      { id: 'breakfast-sweetener', name: 'Edulcorante', amount: 'al gusto' },
+      { id: 'breakfast-oats', name: 'Avena', amount: '120 g' },
+      { id: 'breakfast-milk', name: 'Leche', amount: '300 ml' },
+      { id: 'breakfast-protein-powder', name: 'Proteina en polvo', amount: '30 g' },
+      { id: 'breakfast-peanut-butter', name: 'Crema de cacahuate', amount: '40 g' },
+      { id: 'breakfast-frozen-strawberries', name: 'Fresas congeladas', amount: '150 g' },
     ],
-    nutrition: { calories: 493, protein: 40, carbs: 67, fat: 7 },
+    nutrition: { calories: 983, protein: 60.9, carbs: 108.2, fat: 32.4 },
   },
   {
     id: 'lunch',
     name: 'Comida',
     ingredients: [
-      { id: 'lunch-pasta', name: 'Pasta (peso en seco)', amount: '100 g' },
-      { id: 'lunch-chicken', name: 'Pechuga de pollo (peso en crudo)', amount: '80 g' },
-      { id: 'lunch-vegetables', name: 'Verduras congeladas', amount: '200 g' },
-      { id: 'lunch-hummus', name: 'Hummus', amount: '40 g' },
+      { id: 'lunch-cooked-chicken', name: 'Pechuga de pollo cocida', amount: '90 g' },
+      { id: 'lunch-raw-potato', name: 'Papa cruda', amount: '480 g' },
+      { id: 'lunch-frozen-vegetables', name: 'Verduras congeladas', amount: '200 g' },
     ],
-    nutrition: { calories: 604, protein: 37, carbs: 90, fat: 11 },
-  },
-  {
-    id: 'snack',
-    name: 'Colación',
-    ingredients: [
-      { id: 'snack-bread', name: 'Pan multigrain', amount: '130 g' },
-      { id: 'snack-peanut-butter', name: 'Crema de cacahuate', amount: '30 g' },
-    ],
-    nutrition: { calories: 501, protein: 21, carbs: 65, fat: 20 },
+    nutrition: { calories: 598, protein: 41.5, carbs: 95.6, fat: 4.8 },
   },
   {
     id: 'dinner',
     name: 'Cena',
     ingredients: [
-      { id: 'dinner-pasta', name: 'Pasta (peso en seco)', amount: '175 g' },
-      { id: 'dinner-chicken', name: 'Pechuga de pollo (peso en crudo)', amount: '45 g' },
-      { id: 'dinner-vegetables', name: 'Verduras congeladas', amount: '250 g' },
-      { id: 'dinner-hummus', name: 'Hummus', amount: '100 g' },
+      { id: 'dinner-cooked-chicken', name: 'Pechuga de pollo cocida', amount: '90 g' },
+      { id: 'dinner-raw-potato', name: 'Papa cruda', amount: '660 g' },
+      { id: 'dinner-frozen-vegetables', name: 'Verduras congeladas', amount: '250 g' },
+      { id: 'dinner-peanut-butter', name: 'Crema de cacahuate', amount: '45 g' },
     ],
-    nutrition: { calories: 990, protein: 43, carbs: 155, fat: 22 },
+    nutrition: { calories: 1027, protein: 57.4, carbs: 138.7, fat: 27.8 },
   },
 ]
 

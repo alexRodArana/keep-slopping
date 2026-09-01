@@ -6,8 +6,7 @@ const dateFormatter = new Intl.DateTimeFormat('es-MX', {
   year: 'numeric',
 })
 
-const compactNumberFormatter = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 })
-const decimalNumberFormatter = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 })
+const numberFormatter = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 })
 
 const toDateKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -18,8 +17,7 @@ export const todayIso = () => toDateKey(new Date())
 
 export const formatDate = (value: string) => dateFormatter.format(toLocalDate(value))
 
-export const formatNumber = (value: number) =>
-  (value >= 100 ? compactNumberFormatter : decimalNumberFormatter).format(value)
+export const formatNumber = (value: number) => numberFormatter.format(value)
 
 const getSessionKey = (session: Pick<MealSession, 'date' | 'mealId'>) => `${session.date}::${session.mealId}`
 

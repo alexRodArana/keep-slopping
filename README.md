@@ -5,7 +5,7 @@ Aplicación PWA mobile-first para seguir el plan alimenticio diario de Alejandro
 ## Features
 
 - Checklist diario de comidas, ingredientes y creatina.
-- Plan de 2,600 kcal con cantidades y macronutrientes por comida.
+- Plan de 3 comidas (~2,600 kcal) con cantidades y macronutrientes por comida.
 - Edición manual de comidas, ingredientes y objetivos.
 - Progreso persistente por día.
 - Tema claro/oscuro, acentos configurables, PWA móvil y sincronización con Supabase.
