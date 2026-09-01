@@ -86,6 +86,25 @@ const defaultPlanSignature = JSON.stringify({
 const createId = (prefix: string) => `${prefix}-${crypto.randomUUID()}`
 
 const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
+const REMOTE_LOAD_TIMEOUT_MS = 5000
+
+class RemoteLoadTimeoutError extends Error {}
+
+const withTimeout = <T,>(operation: Promise<T>, milliseconds: number) =>
+  new Promise<T>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new RemoteLoadTimeoutError('Supabase load timed out')), milliseconds)
+
+    operation.then(
+      (value) => {
+        window.clearTimeout(timeout)
+        resolve(value)
+      },
+      (error: unknown) => {
+        window.clearTimeout(timeout)
+        reject(error)
+      },
+    )
+  })
 
 const updateMetaContent = (selector: string, content: string) => {
   document.querySelector(selector)?.setAttribute('content', content)
@@ -147,11 +166,15 @@ function App() {
 
   const loadRemoteStateWithRetry = useCallback(async () => {
     try {
-      return await loadRemoteState()
+      return await withTimeout(loadRemoteState(), REMOTE_LOAD_TIMEOUT_MS)
     } catch (error) {
+      if (error instanceof RemoteLoadTimeoutError) {
+        throw error
+      }
+
       await wait(500)
       try {
-        return await loadRemoteState()
+        return await withTimeout(loadRemoteState(), REMOTE_LOAD_TIMEOUT_MS)
       } catch {
         throw error
       }
@@ -189,6 +212,17 @@ function App() {
           await saveRemoteState(nextState)
         }
         remoteSyncedStateRef.current = nextState
+      } catch (error) {
+        if (authHydrationRef.current !== token) {
+          return
+        }
+
+        console.error('Could not load remote state', error)
+        applyLoadedState(localState)
+        setSession(nextSession)
+        setSyncStatus('error')
+        setSyncMessage('No se pudo cargar Supabase. Mostrando el plan guardado.')
+        remoteSyncedStateRef.current = localState
       } finally {
         if (authHydrationRef.current === token) {
           isHydratingRef.current = false
@@ -642,9 +676,9 @@ function App() {
         <div className="header-actions">
           {session && (
             <button
-              aria-label="Cuenta registrada. Tocar para salir"
+              aria-label={`Cuenta ${session.user.email ?? 'registrada'}. Tocar para salir`}
               className={syncStatus === 'error' ? 'account-status error' : 'account-status'}
-              data-tooltip={syncStatus === 'error' ? 'Error de sync' : 'Registrado'}
+              data-tooltip={syncStatus === 'error' ? 'Error de sync' : (session.user.email ?? 'Registrado')}
               type="button"
               onClick={() => {
                 vibrate(10)

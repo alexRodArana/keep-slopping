@@ -2,7 +2,12 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { initialState } from './data'
 
-const { loadStateMock } = vi.hoisted(() => ({ loadStateMock: vi.fn() }))
+const { getSessionMock, loadRemoteStateMock, loadStateMock, saveRemoteStateMock } = vi.hoisted(() => ({
+  getSessionMock: vi.fn(),
+  loadRemoteStateMock: vi.fn(),
+  loadStateMock: vi.fn(),
+  saveRemoteStateMock: vi.fn(),
+}))
 
 vi.mock('./storage', () => ({
   loadState: loadStateMock,
@@ -10,11 +15,11 @@ vi.mock('./storage', () => ({
 }))
 
 vi.mock('./supabase', () => ({
-  getSession: vi.fn(async () => null),
-  isSupabaseConfigured: false,
-  loadRemoteState: vi.fn(),
+  getSession: getSessionMock,
+  isSupabaseConfigured: true,
+  loadRemoteState: loadRemoteStateMock,
   onAuthChange: vi.fn(() => () => undefined),
-  saveRemoteState: vi.fn(),
+  saveRemoteState: saveRemoteStateMock,
   signInWithEmail: vi.fn(),
   signOut: vi.fn(),
   signUpWithEmail: vi.fn(),
@@ -24,12 +29,39 @@ const freshState = () => JSON.parse(JSON.stringify(initialState))
 
 describe('daily checklist', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
+    getSessionMock.mockResolvedValue(null)
     loadStateMock.mockReturnValue(freshState())
     window.localStorage.setItem('keep-slopping-theme', 'dark')
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
+  })
+
+  it('shows the saved plan instead of hanging when remote hydration times out', async () => {
+    vi.useFakeTimers()
+    getSessionMock.mockResolvedValue({
+      user: { id: 'alejandro', email: 'alex.rodarana@gmail.com' },
+    })
+    loadRemoteStateMock.mockReturnValue(new Promise(() => undefined))
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { default: App } = await import('./App')
+
+    render(<App />)
+    expect(screen.getByText('Cargando plan')).toBeTruthy()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000)
+    })
+
+    expect(screen.getByText('Plan de hoy')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Desayuno' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /alex\.rodarana@gmail\.com/ })).toBeTruthy()
+    expect(loadRemoteStateMock).toHaveBeenCalledOnce()
+    expect(saveRemoteStateMock).not.toHaveBeenCalled()
+    expect(consoleSpy).toHaveBeenCalledOnce()
   })
 
   it('shows only the daily checklist and plan editor tabs', async () => {
