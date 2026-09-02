@@ -67,6 +67,8 @@ const accentOptions: AccentOption[] = [
   { key: 'rose', label: 'Rosa', color: '#be185d' },
 ]
 
+const brandMarkSrc = `${import.meta.env.BASE_URL}app-icon-192.png`
+
 const foodPhrases = [
   'Goy mode off. Meal prep Kosher.',
   'Plan Judio: pesar, cocinar, cumplir.',
@@ -665,12 +667,9 @@ function App() {
       <header className="app-header">
         <button aria-label="Ir a hoy" className="brand" type="button" onClick={() => setActiveTab('today')}>
           <span className="brand-mark">
-            <img src="./keep-slopping-icon.svg" alt="" />
+            <img alt="" src={brandMarkSrc} />
           </span>
-          <span className="brand-copy">
-            <strong>Keep Slopping</strong>
-            <small>{formatNumber(state.target.calories)} kcal · plan de Alejandro</small>
-          </span>
+          <span>Keep Slopping</span>
         </button>
 
         <div className="header-actions">
@@ -733,6 +732,7 @@ function App() {
             data-tooltip={theme === 'dark' ? 'Tema claro' : 'Tema oscuro'}
             type="button"
             onClick={() => {
+              setAccentOpen(false)
               setTheme((current) => (current === 'dark' ? 'light' : 'dark'))
               vibrate(8)
             }}
@@ -742,12 +742,10 @@ function App() {
         </div>
       </header>
 
-      <div className="tabs-wrap">
-        <nav className="tabs" aria-label="Navegación principal">
-          <TabButton active={activeTab === 'today'} icon={<ListChecks size={19} />} label="Hoy" onClick={() => setActiveTab('today')} />
-          <TabButton active={activeTab === 'plan'} icon={<Settings2 size={19} />} label="Plan" onClick={() => setActiveTab('plan')} />
-        </nav>
-      </div>
+      <nav className="tabs" aria-label="Navegación principal">
+        <TabButton active={activeTab === 'today'} icon={<ListChecks size={17} />} label="Hoy" onClick={() => setActiveTab('today')} />
+        <TabButton active={activeTab === 'plan'} icon={<Settings2 size={17} />} label="Plan" onClick={() => setActiveTab('plan')} />
+      </nav>
 
       <main className={`main main-${activeTab}`}>
         <SyncPanel
