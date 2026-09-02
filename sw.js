@@ -1,9 +1,8 @@
-const CACHE_NAME = 'keep-slopping-v15'
+const CACHE_NAME = 'keep-slopping-v16'
 const SCOPE = self.registration.scope
 const CORE_ASSETS = [
   SCOPE,
   `${SCOPE}manifest.webmanifest`,
-  `${SCOPE}keep-slopping-icon.svg`,
   `${SCOPE}apple-touch-icon.png`,
   `${SCOPE}app-icon-192.png`,
   `${SCOPE}app-icon-512.png`,
