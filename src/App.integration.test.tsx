@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { initialState } from './data'
 
@@ -9,7 +9,8 @@ const { getSessionMock, loadRemoteStateMock, loadStateMock, saveRemoteStateMock 
   saveRemoteStateMock: vi.fn(),
 }))
 
-vi.mock('./storage', () => ({
+vi.mock('./storage', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./storage')>(),
   loadState: loadStateMock,
   saveState: vi.fn(),
 }))
@@ -19,6 +20,8 @@ vi.mock('./supabase', () => ({
   isSupabaseConfigured: true,
   loadRemoteState: loadRemoteStateMock,
   onAuthChange: vi.fn(() => () => undefined),
+  requestPasswordReset: vi.fn(),
+  updatePassword: vi.fn(),
   saveRemoteState: saveRemoteStateMock,
   signInWithEmail: vi.fn(),
   signOut: vi.fn(),
@@ -46,14 +49,13 @@ describe('daily checklist', () => {
       user: { id: 'alejandro', email: 'alex.rodarana@gmail.com' },
     })
     loadRemoteStateMock.mockReturnValue(new Promise(() => undefined))
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const { default: App } = await import('./App')
 
     render(<App />)
     expect(screen.getByText('Cargando plan')).toBeTruthy()
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(8000)
     })
 
     expect(screen.getByText('Plan de hoy')).toBeTruthy()
@@ -61,7 +63,7 @@ describe('daily checklist', () => {
     expect(screen.getByRole('button', { name: /alex\.rodarana@gmail\.com/ })).toBeTruthy()
     expect(loadRemoteStateMock).toHaveBeenCalledOnce()
     expect(saveRemoteStateMock).not.toHaveBeenCalled()
-    expect(consoleSpy).toHaveBeenCalledOnce()
+    expect(screen.getByText(/Sin conexión/)).toBeTruthy()
   })
 
   it('shows only the daily checklist and plan editor tabs', async () => {
@@ -81,18 +83,19 @@ describe('daily checklist', () => {
   it('starts with the first phrase and rotates to the next one after 5200 ms', async () => {
     let rotatePhrase: (() => void) | undefined
     vi.spyOn(Math, 'random').mockReturnValue(0)
+    const realInterval = window.setInterval.bind(window)
     const intervalSpy = vi.spyOn(window, 'setInterval').mockImplementation((handler, timeout) => {
       if (timeout === 5200 && typeof handler === 'function') {
         rotatePhrase = handler as () => void
       }
-      return 1
+      return realInterval(handler, timeout)
     })
     const { default: App } = await import('./App')
 
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Goy mode off. Meal prep Kosher.' })).toBeTruthy()
-    expect(intervalSpy).toHaveBeenCalledWith(expect.any(Function), 5200)
+    await waitFor(() => expect(intervalSpy).toHaveBeenCalledWith(expect.any(Function), 5200))
     expect(rotatePhrase).toBeTruthy()
 
     act(() => rotatePhrase?.())

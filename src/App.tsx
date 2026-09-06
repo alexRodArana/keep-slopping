@@ -8,12 +8,11 @@ import {
   Cloud,
   Flame,
   ListChecks,
+  KeyRound,
   Mail,
-  Moon,
   Palette,
   Plus,
   Settings2,
-  Sun,
   Trash2,
   Utensils,
 } from 'lucide-react'
@@ -23,49 +22,43 @@ import {
   type FormEvent,
   type ReactNode,
   type SetStateAction,
-  useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react'
 import './App.css'
+import './suite.css'
+import { RotatingPhrase } from './RotatingPhrase'
+import { useToday } from './useToday'
+import { accentOptions, useAppearance } from './useAppearance'
+import { ThemeButton } from './ThemeButton'
+import { createLocalCache } from './localCache'
+import { useSyncedState } from './useSyncedState'
 import { initialState } from './data'
 import {
   formatNumber,
   getLatestMealSession,
+  getMealSessionsForDate,
   isMealSessionComplete,
   todayIso,
   upsertMealSession,
 } from './domain'
 import { sumNutrition } from './mealUtils'
-import { loadState, saveState } from './storage'
+import { loadState, normalizeState } from './storage'
 import {
   getSession,
   isSupabaseConfigured,
   loadRemoteState,
   onAuthChange,
+  requestPasswordReset,
+  updatePassword,
   saveRemoteState,
   signInWithEmail,
   signOut,
   signUpWithEmail,
   type SyncSession,
 } from './supabase'
-import type { AccentColor, AppState, Ingredient, Meal, MealSession, Nutrition, TabKey, ThemeMode } from './types'
-
-type AccentOption = {
-  key: AccentColor
-  label: string
-  color: string
-}
-
-const accentOptions: AccentOption[] = [
-  { key: 'green', label: 'Verde', color: '#39b980' },
-  { key: 'blue', label: 'Azul', color: '#2563eb' },
-  { key: 'purple', label: 'Morado', color: '#7c3aed' },
-  { key: 'orange', label: 'Naranja', color: '#d97706' },
-  { key: 'rose', label: 'Rosa', color: '#be185d' },
-]
+import type { AppState, Ingredient, Meal, MealSession, Nutrition, TabKey } from './types'
 
 const brandMarkSrc = `${import.meta.env.BASE_URL}app-icon-192.png`
 
@@ -80,37 +73,18 @@ const foodPhrases = [
   'Comida medida, disciplina Judia.',
 ]
 
-const defaultPlanSignature = JSON.stringify({
-  target: initialState.target,
-  meals: initialState.meals,
-})
+const hasPasswordRecoveryParams = () => {
+  const params = new URLSearchParams(`${window.location.search.slice(1)}&${window.location.hash.replace(/^#/, '')}`)
+  return params.get('type') === 'recovery'
+}
+
+const clearPasswordRecoveryUrl = () => {
+  if (hasPasswordRecoveryParams()) {
+    window.history.replaceState(null, '', window.location.pathname)
+  }
+}
 
 const createId = (prefix: string) => `${prefix}-${crypto.randomUUID()}`
-
-const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
-const REMOTE_LOAD_TIMEOUT_MS = 5000
-
-class RemoteLoadTimeoutError extends Error {}
-
-const withTimeout = <T,>(operation: Promise<T>, milliseconds: number) =>
-  new Promise<T>((resolve, reject) => {
-    const timeout = window.setTimeout(() => reject(new RemoteLoadTimeoutError('Supabase load timed out')), milliseconds)
-
-    operation.then(
-      (value) => {
-        window.clearTimeout(timeout)
-        resolve(value)
-      },
-      (error: unknown) => {
-        window.clearTimeout(timeout)
-        reject(error)
-      },
-    )
-  })
-
-const updateMetaContent = (selector: string, content: string) => {
-  document.querySelector(selector)?.setAttribute('content', content)
-}
 
 const vibrate = (duration = 8) => {
   if ('vibrate' in navigator) {
@@ -118,286 +92,39 @@ const vibrate = (duration = 8) => {
   }
 }
 
-const hasUserData = (value: AppState) =>
-  Boolean(
-    value.creatineDates.length ||
-      value.sessions.length ||
-      JSON.stringify({ target: value.target, meals: value.meals }) !== defaultPlanSignature,
-  )
-
 const getMeal = (meals: Meal[], mealId: string) => meals.find((meal) => meal.id === mealId)
 
+const syncOptions = {
+  initialState,
+  configured: isSupabaseConfigured,
+  cache: createLocalCache<AppState>('keep-slopping', normalizeState),
+  loadGuest: loadState,
+  getSession,
+  subscribe: onAuthChange,
+  load: loadRemoteState,
+  save: saveRemoteState,
+}
+
 function App() {
-  const [state, setState] = useState<AppState>(initialState)
-  const stateRef = useRef(state)
-  const sessionRef = useRef<SyncSession | null>(null)
-  const authHydrationRef = useRef(0)
-  const initialAuthHandledRef = useRef(false)
-  const isHydratingRef = useRef(false)
-  const remoteSaveQueueRef = useRef<Promise<void>>(Promise.resolve())
-  const remoteSaveRevisionRef = useRef(0)
-  const remoteSyncedStateRef = useRef<AppState | undefined>(undefined)
-  const [isLoaded, setIsLoaded] = useState(false)
-  const [session, setSession] = useState<SyncSession | null>(null)
+  const sync = useSyncedState(syncOptions)
+  return <Workspace key={sync.session?.user.id ?? 'guest'} sync={sync} />
+}
+
+function Workspace({ sync }: { sync: ReturnType<typeof useSyncedState<AppState>> }) {
+  const {
+    state, setState, session, isLoaded, syncStatus, setSyncStatus, syncMessage, setSyncMessage,
+    isPasswordRecovery, setIsPasswordRecovery, hydrateSessionState, retrySync, flush,
+  } = sync
   const [syncEmail, setSyncEmail] = useState('')
   const [syncPassword, setSyncPassword] = useState('')
-  const [syncMessage, setSyncMessage] = useState('')
-  const [syncStatus, setSyncStatus] = useState<'local' | 'loading' | 'synced' | 'sent' | 'error'>('local')
   const [syncCooldown, setSyncCooldown] = useState(0)
   const [activeTab, setActiveTab] = useState<TabKey>('today')
-  const [theme, setTheme] = useState<ThemeMode>(() => {
-    const storedTheme = localStorage.getItem('keep-slopping-theme')
-    return storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'dark'
-  })
-  const [accent, setAccent] = useState<AccentColor>(() => {
-    const storedAccent = localStorage.getItem('keep-slopping-accent')
-    return accentOptions.some((option) => option.key === storedAccent) ? (storedAccent as AccentColor) : 'green'
-  })
+  const { themeMode, setThemeMode, accent, setAccent } = useAppearance('keep-slopping')
   const [accentOpen, setAccentOpen] = useState(false)
-  const [foodPhraseIndex, setFoodPhraseIndex] = useState(() => Math.floor(Math.random() * foodPhrases.length))
 
-  const today = todayIso()
+  const today = useToday(todayIso)
   const currentAccent = accentOptions.find((option) => option.key === accent) ?? accentOptions[0]
-  const currentFoodPhrase = foodPhrases[foodPhraseIndex]
   const dailyNutrition = useMemo(() => sumNutrition(state.meals), [state.meals])
-
-  const applyLoadedState = useCallback((savedState: AppState) => {
-    stateRef.current = savedState
-    setState(savedState)
-  }, [])
-
-  const loadRemoteStateWithRetry = useCallback(async () => {
-    try {
-      return await withTimeout(loadRemoteState(), REMOTE_LOAD_TIMEOUT_MS)
-    } catch (error) {
-      if (error instanceof RemoteLoadTimeoutError) {
-        throw error
-      }
-
-      await wait(500)
-      try {
-        return await withTimeout(loadRemoteState(), REMOTE_LOAD_TIMEOUT_MS)
-      } catch {
-        throw error
-      }
-    }
-  }, [])
-
-  const hydrateSessionState = useCallback(
-    async (nextSession: SyncSession, localState: AppState) => {
-      const token = authHydrationRef.current + 1
-      authHydrationRef.current = token
-      isHydratingRef.current = true
-      setSyncStatus('loading')
-
-      try {
-        const remoteState = await loadRemoteStateWithRetry()
-        if (authHydrationRef.current !== token) {
-          return
-        }
-
-        const shouldBootstrapRemote = !hasUserData(remoteState) && hasUserData(localState)
-        const nextState = shouldBootstrapRemote ? localState : remoteState
-
-        applyLoadedState(nextState)
-        setSession(nextSession)
-        setSyncStatus('synced')
-        setSyncMessage('')
-
-        try {
-          saveState(nextState)
-        } catch (error) {
-          console.error('Could not cache remote state locally', error)
-        }
-
-        if (shouldBootstrapRemote) {
-          await saveRemoteState(nextState)
-        }
-        remoteSyncedStateRef.current = nextState
-      } catch (error) {
-        if (authHydrationRef.current !== token) {
-          return
-        }
-
-        console.error('Could not load remote state', error)
-        applyLoadedState(localState)
-        setSession(nextSession)
-        setSyncStatus('error')
-        setSyncMessage('No se pudo cargar Supabase. Mostrando el plan guardado.')
-        remoteSyncedStateRef.current = localState
-      } finally {
-        if (authHydrationRef.current === token) {
-          isHydratingRef.current = false
-        }
-      }
-    },
-    [applyLoadedState, loadRemoteStateWithRetry],
-  )
-
-  useEffect(() => {
-    let mounted = true
-
-    const loadInitialState = async () => {
-      try {
-        const localState = loadState()
-
-        if (isSupabaseConfigured) {
-          const currentSession = await getSession()
-          if (!mounted) {
-            return
-          }
-
-          if (currentSession) {
-            await hydrateSessionState(currentSession, localState)
-          } else {
-            setSession(null)
-            applyLoadedState(localState)
-            setSyncStatus('local')
-          }
-        } else {
-          applyLoadedState(localState)
-          setSyncStatus('local')
-        }
-      } catch (error) {
-        console.error('Could not load persisted state', error)
-        if (mounted) {
-          applyLoadedState(loadState())
-          setSyncStatus('error')
-          setSyncMessage('No se pudo cargar Supabase.')
-        }
-      } finally {
-        if (mounted) {
-          initialAuthHandledRef.current = true
-          setIsLoaded(true)
-        }
-      }
-    }
-
-    void loadInitialState()
-
-    const unsubscribe = onAuthChange(async (nextSession) => {
-      if (!initialAuthHandledRef.current) {
-        return
-      }
-
-      if (!nextSession) {
-        authHydrationRef.current += 1
-        isHydratingRef.current = false
-        setSession(null)
-        setSyncStatus('local')
-        return
-      }
-
-      try {
-        const localState = stateRef.current
-        if (!mounted) {
-          return
-        }
-        await hydrateSessionState(nextSession, localState)
-        setSyncPassword('')
-      } catch (error) {
-        console.error('Could not load remote state', error)
-        setSession(nextSession)
-        setSyncStatus('error')
-        setSyncMessage('No se pudo sincronizar.')
-      }
-    })
-
-    return () => {
-      mounted = false
-      unsubscribe()
-    }
-  }, [applyLoadedState, hydrateSessionState])
-
-  useEffect(() => {
-    stateRef.current = state
-  }, [state])
-
-  useEffect(() => {
-    sessionRef.current = session
-  }, [session])
-
-  useEffect(() => {
-    if (!isLoaded || isHydratingRef.current) {
-      return
-    }
-
-    const timeout = window.setTimeout(() => {
-      try {
-        saveState(state)
-      } catch (error) {
-        console.error('Could not save local state', error)
-        setSyncStatus('error')
-        setSyncMessage('No se pudo guardar localmente.')
-      }
-    }, 80)
-
-    return () => window.clearTimeout(timeout)
-  }, [isLoaded, state])
-
-  useEffect(() => {
-    if (!isLoaded || isHydratingRef.current) {
-      return
-    }
-
-    if (!session) {
-      remoteSaveRevisionRef.current += 1
-      remoteSyncedStateRef.current = undefined
-      return
-    }
-
-    if (state === remoteSyncedStateRef.current) {
-      return
-    }
-
-    const targetUserId = session.user.id
-    const timeout = window.setTimeout(() => {
-      const revision = remoteSaveRevisionRef.current + 1
-      remoteSaveRevisionRef.current = revision
-      const pendingSave = remoteSaveQueueRef.current.catch(() => undefined).then(async () => {
-        if (sessionRef.current?.user.id !== targetUserId) {
-          return
-        }
-        await saveRemoteState(state, remoteSyncedStateRef.current)
-        if (sessionRef.current?.user.id === targetUserId) {
-          remoteSyncedStateRef.current = state
-        }
-      })
-      remoteSaveQueueRef.current = pendingSave
-
-      void pendingSave
-        .then(() => {
-          if (remoteSaveRevisionRef.current === revision) {
-            setSyncStatus('synced')
-            setSyncMessage('')
-          }
-        })
-        .catch((error) => {
-          if (remoteSaveRevisionRef.current === revision) {
-            console.error('Could not save remote state', error)
-            setSyncStatus('error')
-            setSyncMessage('No se pudo sincronizar.')
-          }
-        })
-    }, 500)
-
-    return () => window.clearTimeout(timeout)
-  }, [isLoaded, session, state])
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme
-    localStorage.setItem('keep-slopping-theme', theme)
-    updateMetaContent('meta[name="theme-color"]', theme === 'dark' ? '#0d0f12' : '#f5f6f8')
-    updateMetaContent(
-      'meta[name="apple-mobile-web-app-status-bar-style"]',
-      theme === 'dark' ? 'black-translucent' : 'default',
-    )
-  }, [theme])
-
-  useEffect(() => {
-    document.documentElement.dataset.accent = accent
-    localStorage.setItem('keep-slopping-accent', accent)
-  }, [accent])
 
   useEffect(() => {
     if (syncCooldown <= 0) {
@@ -408,32 +135,84 @@ function App() {
     return () => window.clearInterval(interval)
   }, [syncCooldown])
 
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      setFoodPhraseIndex((index) => (index + 1) % foodPhrases.length)
-    }, 5200)
-
-    return () => window.clearInterval(interval)
-  }, [])
-
   const requestSyncLink = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!syncEmail.trim() || !syncPassword || syncCooldown > 0) {
+    if (syncCooldown > 0) {
       return
     }
 
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
-    const intent = submitter?.value === 'signup' ? 'signup' : 'signin'
+    const intent = submitter?.value ?? 'signin'
+
+    if (intent === 'reset') {
+      if (!syncEmail.trim()) {
+        setSyncStatus('error')
+        setSyncMessage('Escribe el correo de tu cuenta.')
+        return
+      }
+
+      try {
+        setSyncStatus('loading')
+        await requestPasswordReset(syncEmail.trim())
+        setSyncStatus('sent')
+        setSyncCooldown(60)
+        setSyncMessage('Si el correo existe, recibiras un link para recuperar tu contraseña.')
+      } catch (error) {
+        console.error('Could not request password reset', error)
+        setSyncStatus('error')
+        const errorMessage = error instanceof Error ? error.message : 'No se pudo enviar el correo.'
+        setSyncMessage(errorMessage.toLowerCase().includes('rate limit') ? 'Espera 60 segundos antes de intentar otra vez.' : errorMessage)
+        if (errorMessage.toLowerCase().includes('rate limit')) {
+          setSyncCooldown(60)
+        }
+      }
+      return
+    }
+
+    if (intent === 'password') {
+      if (!syncPassword || syncPassword.length < 6) {
+        setSyncStatus('error')
+        setSyncMessage('La contraseña debe tener al menos 6 caracteres.')
+        return
+      }
+
+      try {
+        setSyncStatus('loading')
+        await updatePassword(syncPassword)
+        const currentSession = await getSession()
+        if (currentSession) {
+          await hydrateSessionState(currentSession, true)
+        }
+        setIsPasswordRecovery(false)
+        setSyncPassword('')
+        setSyncStatus('synced')
+        setSyncMessage('Contraseña actualizada.')
+        clearPasswordRecoveryUrl()
+      } catch (error) {
+        console.error('Could not update password', error)
+        setSyncStatus('error')
+        setSyncMessage(error instanceof Error ? error.message : 'No se pudo actualizar la contraseña.')
+      }
+      return
+    }
+
+    if (!syncEmail.trim() || !syncPassword) {
+      setSyncStatus('error')
+      setSyncMessage('Escribe correo y contraseña.')
+      return
+    }
+
+    const authIntent = intent === 'signup' ? 'signup' : 'signin'
 
     try {
       setSyncStatus('loading')
-      if (intent === 'signup') {
+      if (authIntent === 'signup') {
         await signUpWithEmail(syncEmail.trim(), syncPassword)
       } else {
         await signInWithEmail(syncEmail.trim(), syncPassword)
       }
       setSyncStatus('sent')
-      setSyncMessage(intent === 'signup' ? 'Cuenta creada.' : '')
+      setSyncMessage(authIntent === 'signup' ? 'Cuenta creada.' : '')
     } catch (error) {
       console.error('Could not authenticate with Supabase', error)
       setSyncStatus('error')
@@ -460,12 +239,15 @@ function App() {
   }
 
   const disconnectSync = async () => {
-    authHydrationRef.current += 1
-    isHydratingRef.current = false
-    await signOut()
-    setSession(null)
-    setSyncStatus('local')
-    setSyncPassword('')
+    if (!window.confirm('¿Cerrar sesión en este dispositivo?')) return
+    try {
+      await flush()
+      await signOut()
+      setSyncPassword('')
+    } catch {
+      setSyncStatus('error')
+      setSyncMessage('No se pudo cerrar sesión. Inténtalo de nuevo.')
+    }
   }
 
   const updateTodaySession = (mealId: string, nextCheckedIds: (current: string[], meal: Meal) => string[]) => {
@@ -580,6 +362,8 @@ function App() {
   }
 
   const deleteMeal = (mealId: string) => {
+    const meal = state.meals.find((item) => item.id === mealId)
+    if (!meal || !window.confirm(`¿Eliminar ${meal.name} y sus registros?`)) return
     vibrate(12)
     setState((current) => ({
       ...current,
@@ -637,7 +421,6 @@ function App() {
     activeTab === 'today' ? (
       <TodayView
         creatineCompleted={state.creatineDates.includes(today)}
-        heroPhrase={currentFoodPhrase}
         meals={state.meals}
         sessions={state.sessions}
         target={state.target}
@@ -726,19 +509,7 @@ function App() {
             )}
           </div>
 
-          <button
-            aria-label="Cambiar tema"
-            className="icon-button"
-            data-tooltip={theme === 'dark' ? 'Tema claro' : 'Tema oscuro'}
-            type="button"
-            onClick={() => {
-              setAccentOpen(false)
-              setTheme((current) => (current === 'dark' ? 'light' : 'dark'))
-              vibrate(8)
-            }}
-          >
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
+          <ThemeButton mode={themeMode} onChange={setThemeMode} />
         </div>
       </header>
 
@@ -748,9 +519,15 @@ function App() {
       </nav>
 
       <main className={`main main-${activeTab}`}>
+        {session && syncStatus === 'error' && (
+          <button className="sync-alert" type="button" onClick={() => void retrySync()} role="status">
+            <Cloud size={16} /><span>{syncMessage}</span><span>Reintentar</span>
+          </button>
+        )}
         <SyncPanel
           email={syncEmail}
           isConfigured={isSupabaseConfigured}
+          isPasswordRecovery={isPasswordRecovery}
           message={syncMessage}
           password={syncPassword}
           session={session}
@@ -769,6 +546,7 @@ function App() {
 function SyncPanel({
   email,
   isConfigured,
+  isPasswordRecovery,
   message,
   password,
   session,
@@ -780,6 +558,7 @@ function SyncPanel({
 }: {
   email: string
   isConfigured: boolean
+  isPasswordRecovery: boolean
   message: string
   password: string
   session: SyncSession | null
@@ -793,13 +572,34 @@ function SyncPanel({
     return (
       <section className="sync-panel muted">
         <Cloud size={17} />
-        <span>Supabase pendiente</span>
+        <span>En este dispositivo</span>
       </section>
     )
   }
 
-  if (session) {
+  if (session && !isPasswordRecovery) {
     return null
+  }
+
+  if (isPasswordRecovery) {
+    return (
+      <form className="sync-panel login password-recovery" onSubmit={submit}>
+        <KeyRound size={17} />
+        <input
+          aria-label="Nueva contraseña"
+          autoComplete="new-password"
+          minLength={6}
+          placeholder="nueva contraseña"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
+        <button className="primary-button compact" disabled={status === 'loading'} type="submit" value="password">
+          Guardar
+        </button>
+        {message && <small>{message}</small>}
+      </form>
+    )
   }
 
   return (
@@ -827,6 +627,9 @@ function SyncPanel({
       </button>
       <button className="secondary-button compact" disabled={status === 'loading' || syncCooldown > 0} type="submit" value="signup">
         Crear
+      </button>
+      <button className="ghost-button compact" disabled={status === 'loading' || syncCooldown > 0} formNoValidate type="submit" value="reset">
+        Recuperar
       </button>
       {message && <small>{message}</small>}
     </form>
@@ -881,7 +684,6 @@ function MetricCard({ icon, label, value }: { icon: ReactNode; label: string; va
 
 function TodayView({
   creatineCompleted,
-  heroPhrase,
   meals,
   sessions,
   target,
@@ -891,7 +693,6 @@ function TodayView({
   toggleMeal,
 }: {
   creatineCompleted: boolean
-  heroPhrase: string
   meals: Meal[]
   sessions: MealSession[]
   target: Nutrition
@@ -901,14 +702,8 @@ function TodayView({
   toggleMeal: (mealId: string) => void
 }) {
   const sessionsByMealId = useMemo(
-    () =>
-      new Map(
-        meals.flatMap((meal) => {
-          const session = getLatestMealSession(sessions, meal.id, today)
-          return session ? [[meal.id, session] as const] : []
-        }),
-      ),
-    [meals, sessions, today],
+    () => getMealSessionsForDate(sessions, today),
+    [sessions, today],
   )
   const completedMeals = meals.filter((meal) => {
     const session = sessionsByMealId.get(meal.id)
@@ -926,9 +721,7 @@ function TodayView({
     <section className="today-view enter">
       <div className="today-hero-copy">
         <span>Plan de hoy</span>
-        <h1 className="hero-phrase" key={heroPhrase}>
-          {heroPhrase}
-        </h1>
+        <RotatingPhrase className="hero-phrase" phrases={foodPhrases} />
       </div>
 
       <section className="hero-panel" aria-label="Progreso del día">
@@ -1118,9 +911,8 @@ function PlanView({
     <section className="plan-view enter">
       <div className="plan-head">
         <div>
-          <span>Plan de Alejandro</span>
+          <span>Tu alimentación</span>
           <h1>Editar plan</h1>
-          <p>Las modificaciones se guardan automáticamente.</p>
         </div>
         <button
           aria-label="Agregar comida"

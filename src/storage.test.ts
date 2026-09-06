@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { defaultMeals, defaultTarget } from './data'
+import { defaultTarget } from './data'
 import { hasLegacyStateKeys, loadState, normalizeState, requiresPlanMigration } from './storage'
 
 const STORAGE_KEY = 'keep-slopping-state-v1'
@@ -9,7 +9,7 @@ describe('state migration', () => {
     localStorage.clear()
   })
 
-  it('replaces the previous v2 plan, clears its sessions, and preserves normalized creatine dates', () => {
+  it('upgrades the format without replacing a personalized plan or clearing its sessions', () => {
     const previousPlanState = {
       planVersion: 2,
       target: { calories: 2600, protein: 140, carbs: 375, fat: 60 },
@@ -19,12 +19,13 @@ describe('state migration', () => {
     }
 
     expect(requiresPlanMigration(previousPlanState)).toBe(true)
-    expect(normalizeState(previousPlanState)).toEqual({
+    const result = normalizeState(previousPlanState)
+    expect(result).toMatchObject({
       planVersion: 3,
-      target: defaultTarget,
+      target: previousPlanState.target,
       creatineDates: ['2026-08-06', '2026-08-04'],
-      meals: defaultMeals,
-      sessions: [],
+      meals: [{ id: 'snack', name: 'Colación' }],
+      sessions: [{ id: 'old-session', mealId: 'snack' }],
     })
   })
 
@@ -32,7 +33,7 @@ describe('state migration', () => {
     expect(normalizeState({ creatineDates: ['2026-08-04'], meals: [] })).toMatchObject({
       planVersion: 3,
       creatineDates: ['2026-08-04'],
-      meals: defaultMeals,
+      meals: [],
       sessions: [],
     })
   })
@@ -193,7 +194,7 @@ describe('state migration', () => {
     const state = loadState()
 
     expect(state.creatineDates).toEqual(['2026-08-04'])
-    expect(state.meals).toEqual(defaultMeals)
+    expect(state.meals).toEqual([])
     expect(consoleSpy).toHaveBeenCalledOnce()
     storageSpy.mockRestore()
     consoleSpy.mockRestore()

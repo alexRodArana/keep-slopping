@@ -1,12 +1,12 @@
 {
   "name": "Keep Slopping",
   "short_name": "Keep Slopping",
-  "description": "Checklist diario de comidas, ingredientes y creatina para el plan alimenticio de Alejandro.",
+  "description": "Checklist diario de comidas, ingredientes y creatina para tu plan alimenticio.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
-  "background_color": "#f5f6f8",
-  "theme_color": "#f5f6f8",
+  "background_color": "#0d0f12",
+  "theme_color": "#0d0f12",
   "orientation": "portrait",
   "icons": [
     {
@@ -21,5 +21,6 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "id": "./"
 }

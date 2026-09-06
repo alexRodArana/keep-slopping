@@ -48,6 +48,16 @@ export const getLatestMealSession = (sessions: MealSession[], mealId: string, da
   return latest
 }
 
+export const getMealSessionsForDate = (sessions: MealSession[], date: string) => {
+  const latest = new Map<string, MealSession>()
+  for (const session of sessions) {
+    if (session.date !== date) continue
+    const previous = latest.get(session.mealId)
+    if (!previous || getSessionTime(session) >= getSessionTime(previous)) latest.set(session.mealId, session)
+  }
+  return latest
+}
+
 export const upsertMealSession = (sessions: MealSession[], nextSession: MealSession) => {
   const nextKey = getSessionKey(nextSession)
   const remaining = sessions.filter((session) => getSessionKey(session) !== nextKey)

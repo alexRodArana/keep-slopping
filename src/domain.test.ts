@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatNumber, getLatestMealSession, isMealSessionComplete, upsertMealSession } from './domain'
+import { formatNumber, getLatestMealSession, getMealSessionsForDate, isMealSessionComplete, upsertMealSession } from './domain'
 import type { Meal, MealSession } from './types'
 
 const meal: Meal = {
@@ -24,6 +24,15 @@ const session = (patch: Partial<MealSession> = {}): MealSession => ({
 })
 
 describe('checklist domain', () => {
+  it('indexes only the latest session for every meal on the selected local day', () => {
+    const older = session()
+    const newer = session({ id: 'newer', endedAt: '2026-08-10T13:00:00.000Z' })
+    const dinner = session({ id: 'dinner', mealId: 'dinner' })
+    const otherDay = session({ id: 'tomorrow', date: '2026-08-11' })
+    const result = getMealSessionsForDate([newer, otherDay, older, dinner], older.date)
+    expect([...result.values()].map((item) => item.id)).toEqual(['newer', 'dinner'])
+  })
+
   it('preserves the PDF precision for decimal macros above 100 grams', () => {
     expect(formatNumber(108.2)).toBe('108.2')
     expect(formatNumber(1027)).toBe('1,027')

@@ -1,31 +1,33 @@
 # Keep Slopping
 
-Aplicación PWA mobile-first para seguir el plan alimenticio diario de Alejandro con la misma cuenta de The Goy Project.
+PWA para seguir y editar planes alimenticios, marcar ingredientes y registrar la creatina diaria.
 
-## Features
+React 19, TypeScript, Vite y Supabase Auth/Postgres. Ambas apps comparten cuentas, apariencia y una fila de datos por usuario, pero leen y actualizan solo su propia seccion.
 
-- Checklist diario de comidas, ingredientes y creatina.
-- Plan de 3 comidas (~2,600 kcal) con cantidades y macronutrientes por comida.
-- Edición manual de comidas, ingredientes y objetivos.
-- Progreso persistente por día.
-- Tema claro/oscuro, acentos configurables, PWA móvil y sincronización con Supabase.
+## Desarrollo
 
-## Supabase
-
-Keep Slopping usa el mismo proyecto de Supabase y las mismas cuentas que The Goy Project. Los datos se guardan bajo la clave `keepSlopping`; las funciones atómicas de Postgres leen y actualizan solo esa sección para evitar consultas redundantes y conflictos con el historial de entrenamiento.
-
-Required environment variables:
+Node.js 24 LTS. Configura en `.env.local` las variables de `.env.example`: `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`. Usa una clave publishable/anon, nunca una clave secret/service_role. Sin configuracion se puede trabajar localmente; esos datos no se importan automaticamente a una cuenta.
 
 ```bash
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-```
-
-## Scripts
-
-```bash
+npm ci
 npm run dev
 npm run lint
-npm run test
+npm test
+npx playwright install chromium webkit
+npm run test:e2e
 npm run build
 ```
+
+## Persistencia
+
+IndexedDB mantiene cache por app y usuario y cambios pendientes. La sincronizacion envia diferencias por registro, verifica el propietario y no sustituye el estado de la otra app. Cerrar sesion limpia los datos visibles y los borradores de esa cuenta.
+
+Para una instalacion nueva de Supabase, ejecutar primero `supabase/schema.sql` y despues `supabase/migrations/202609050001_incremental_sync.sql` del repositorio The Goy Project. No basta con instalar solo el esquema antiguo. Ambos frontends requieren esa migracion. Las pruebas SQL estan en `supabase/tests/incremental_sync.sql` del mismo repositorio.
+
+## Publicacion
+
+[Keep Slopping](https://alexrodarana.github.io/keep-slopping/). Cada push a `main` ejecuta las comprobaciones y publica mediante GitHub Actions. Pages debe estar configurado para GitHub Actions; sus secrets son las dos variables publicas de Supabase indicadas arriba.
+
+El tema sigue al dispositivo por defecto. El menu de apariencia permite elegir Dispositivo, Claro u Oscuro; el acento es independiente. Los iconos de la suite se encuentran en `public/`.
+
+[Informe de auditoria, validaciones y limites](AUDIT.md).

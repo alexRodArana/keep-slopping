@@ -151,15 +151,11 @@ export const normalizeState = (value: unknown): AppState => {
 
   const creatineDates = normalizeDateList(value.creatineDates)
 
-  if (requiresPlanMigration(value)) {
-    return freshInitialState(creatineDates)
-  }
-
   const meals = normalizeMeals(value.meals)
   const rawVersion = Math.trunc(Number(value.planVersion))
 
   return {
-    planVersion: Math.max(CURRENT_PLAN_VERSION, rawVersion),
+    planVersion: Number.isFinite(rawVersion) ? Math.max(CURRENT_PLAN_VERSION, rawVersion) : CURRENT_PLAN_VERSION,
     target: normalizeNutrition(value.target, defaultTarget),
     creatineDates,
     meals,

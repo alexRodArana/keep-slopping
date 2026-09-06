@@ -1,8 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Session } from '@supabase/supabase-js'
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { initialState } from './data'
-import { hasLegacyStateKeys, normalizeState, requiresPlanMigration } from './storage'
+import { normalizeState } from './storage'
 import type { AppState } from './types'
+import { buildStatePatch, hasStateChanges } from './stateSync'
+import { isPublishableKey } from './security'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -20,7 +22,7 @@ const isValidUrl = (value: unknown) => {
   }
 }
 
-const canInitializeSupabase = isValidUrl(supabaseUrl) && Boolean(supabaseAnonKey)
+const canInitializeSupabase = isValidUrl(supabaseUrl) && isPublishableKey(supabaseAnonKey)
 const KEEP_SLOPPING_KEY = 'keepSlopping'
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -82,16 +84,17 @@ export const getSession = async () => {
   return data.session
 }
 
-export const onAuthChange = (callback: (session: Session | null) => void) => {
+export const onAuthChange = (callback: (session: Session | null, event: AuthChangeEvent) => void) => {
   if (!supabase) {
     return () => undefined
   }
 
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange((_event, session) => callback(session))
-
-  return () => subscription.unsubscribe()
+  let disposed = false
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    // Release the auth lock before any listener starts another Supabase request.
+    window.setTimeout(() => { if (!disposed) callback(session, event) }, 0)
+  })
+  return () => { disposed = true; subscription.unsubscribe() }
 }
 
 export const signInWithEmail = async (email: string, password: string) => {
@@ -127,6 +130,31 @@ export const signUpWithEmail = async (email: string, password: string) => {
   }
 }
 
+export const requestPasswordReset = async (email: string) => {
+  if (!supabase) {
+    throw new Error('Supabase is not configured')
+  }
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: getAuthRedirectUrl(),
+  })
+
+  if (error) {
+    throw new Error(getSupabaseErrorMessage(error))
+  }
+}
+
+export const updatePassword = async (password: string) => {
+  if (!supabase) {
+    throw new Error('Supabase is not configured')
+  }
+
+  const { error } = await supabase.auth.updateUser({ password })
+  if (error) {
+    throw new Error(getSupabaseErrorMessage(error))
+  }
+}
+
 export const signOut = async () => {
   if (!supabase) {
     return
@@ -145,59 +173,29 @@ export const loadRemoteState = async (): Promise<AppState> => {
 
   const { data, error } = await supabase.rpc('get_goy_app_state_sections', {
     p_keys: [KEEP_SLOPPING_KEY],
-  })
+  }).abortSignal(AbortSignal.timeout(8000))
 
   if (error) {
     throw error
   }
 
   if (isRecord(data) && KEEP_SLOPPING_KEY in data) {
-    const value = data[KEEP_SLOPPING_KEY]
-    const state = normalizeState(value)
-
-    if (requiresPlanMigration(value) || hasLegacyStateKeys(value)) {
-      await saveRemoteState(state)
-    }
-
-    return state
+    return normalizeState(data[KEEP_SLOPPING_KEY])
   }
 
   return normalizeState(initialState)
 }
 
-export const saveRemoteState = async (state: AppState, previousState?: AppState) => {
-  if (!supabase) {
-    return
-  }
-
-  const patch: Record<string, unknown> = {}
-  if (!previousState || state.planVersion !== previousState.planVersion) {
-    patch.planVersion = state.planVersion
-  }
-  if (!previousState || state.target !== previousState.target) {
-    patch.target = state.target
-  }
-  if (!previousState || state.creatineDates !== previousState.creatineDates) {
-    patch.creatineDates = state.creatineDates
-  }
-  if (!previousState || state.meals !== previousState.meals) {
-    patch.meals = state.meals
-  }
-  if (!previousState || state.sessions !== previousState.sessions) {
-    patch.sessions = state.sessions
-  }
-
-  if (!Object.keys(patch).length) {
-    return
-  }
-
-  const { error } = await supabase.rpc('merge_goy_app_state_section', {
+export const saveRemoteState = async (state: AppState, previousState?: AppState, owner?: string) => {
+  if (!supabase) return
+  const changes = buildStatePatch(state, previousState)
+  if (!hasStateChanges(changes)) return
+  if (!owner) throw new Error('No se pudo verificar la cuenta.')
+  const { error } = await supabase.rpc('patch_goy_app_state', {
     p_section_key: KEEP_SLOPPING_KEY,
-    p_patch: patch,
-    p_remove_keys: ['foodLogs', 'activeSession', 'notes'],
-  })
-
-  if (error) {
-    throw error
-  }
+    p_expected_user_id: owner,
+    p_patch: changes.patch,
+    p_changes: changes.changes,
+  }).abortSignal(AbortSignal.timeout(10000))
+  if (error) throw error
 }
