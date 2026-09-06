@@ -46,6 +46,26 @@
   animation-duration: 360ms;
 }
 
+.icon-button {
+  width: 42px;
+  height: 42px;
+  min-height: 42px;
+  flex: 0 0 auto;
+}
+
+.icon-button.flat {
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+}
+
+.account-status {
+  width: 42px;
+  height: 42px;
+  min-height: 42px;
+  flex: 0 0 auto;
+}
+
 .brand-mark {
   background: #fff;
   border: 0;
@@ -97,7 +117,7 @@ html[data-theme='dark'] .brand-mark img { filter: invert(1); }
   animation: suiteReveal 400ms var(--ease-smooth) both;
 }
 
-.today-hero-copy { min-height: 188px; gap: 0; }
+.today-hero-copy { min-height: 156px; gap: 0; }
 .training-home { gap: 14px; }
 .hero-stats { gap: 0; padding-block: 8px; }
 .metric-card {
@@ -193,7 +213,7 @@ select { font-size: 16px; }
   .brand > span:last-child { font-size: 13px; }
   .header-actions { gap: 2px; }
   .header-actions .icon-button,
-  .account-status { width: 40px; min-height: 44px; }
+  .account-status { width: 40px; height: 40px; min-height: 40px; }
   .tabs {
     width: min(304px, calc(100% - 32px));
     max-width: none;
@@ -207,7 +227,7 @@ select { font-size: 16px; }
   .start-card { padding: 12px 0; }
   .training-phrase,
   .hero-phrase { font-size: 27px; min-height: 156px; line-height: 1.24; }
-  .today-hero-copy { min-height: 184px; }
+  .today-hero-copy { min-height: 156px; }
   .metric-card { padding-inline: 8px; }
   .metric-card strong { font-size: 13px; }
   .metric-card span { font-size: 11px; }
@@ -223,7 +243,7 @@ select { font-size: 16px; }
   .sync-panel.login.password-recovery .primary-button.compact { grid-column: 1 / -1; grid-row: 2; }
   .sync-panel.login small { grid-column: 1 / -1; }
   .routine-picker { grid-template-columns: minmax(0, 1fr) repeat(3, 40px); gap: 6px; }
-  .routine-picker .icon-button { width: 40px; }
+  .routine-picker .icon-button { width: 40px; height: 40px; min-height: 40px; }
 }
 
 @media (max-width: 360px) {

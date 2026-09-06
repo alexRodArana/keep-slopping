@@ -30,6 +30,7 @@ test('meal and creatine checklists persist and edits do not double-count meals',
 test('shared appearance, contrast, responsive layout and logo rendering', async ({ page }, info) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Desayuno', exact: true })).toBeVisible()
+  await expect(page.getByText('Plan de hoy', { exact: true })).toHaveCount(0)
   for (const theme of ['dark', 'light']) {
     await page.emulateMedia({ colorScheme: theme as 'dark' | 'light' })
     await expect(page.locator('html')).toHaveAttribute('data-theme-mode', 'system')
@@ -37,6 +38,15 @@ test('shared appearance, contrast, responsive layout and logo rendering', async 
     await page.getByRole('button', { name: 'Cambiar acento', exact: true }).click()
     await page.getByRole('menuitemradio', { name: 'Color Azul' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-accent', 'blue')
+    const ovalControls = await page.locator('.icon-button:not(.tiny), .account-status, .accent-swatch, .check-icon, .meal-master-check').evaluateAll((nodes) =>
+      nodes.flatMap((node) => {
+        const { width, height } = node.getBoundingClientRect()
+        return width > 0 && height > 0 && Math.abs(width - height) > 0.5
+          ? [{ className: node.className, width, height }]
+          : []
+      }),
+    )
+    expect(ovalControls).toEqual([])
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     expect(await page.locator('.brand-mark img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth === 192)).toBe(true)
     const findings = await new AxeBuilder({ page }).disableRules(['meta-viewport']).analyze()

@@ -605,12 +605,6 @@ textarea:focus-visible {
   text-align: center;
 }
 
-.today-hero-copy > span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
-}
-
 .hero-phrase {
   display: flex;
   min-height: 104px;
@@ -1608,10 +1602,6 @@ textarea:focus-visible {
     width: min(100%, 380px);
     min-height: 164px;
     margin-top: 2px;
-  }
-
-  .today-hero-copy > span {
-    font-size: 11px;
   }
 
   .hero-phrase {

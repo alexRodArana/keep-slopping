@@ -58,7 +58,8 @@ describe('daily checklist', () => {
       await vi.advanceTimersByTimeAsync(8000)
     })
 
-    expect(screen.getByText('Plan de hoy')).toBeTruthy()
+    expect(screen.queryByText('Plan de hoy')).toBeNull()
+    expect(screen.getByRole('heading', { level: 1 })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Desayuno' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /alex\.rodarana@gmail\.com/ })).toBeTruthy()
     expect(loadRemoteStateMock).toHaveBeenCalledOnce()
@@ -70,7 +71,8 @@ describe('daily checklist', () => {
     const { default: App } = await import('./App')
     render(<App />)
 
-    expect(await screen.findByText('Plan de hoy')).toBeTruthy()
+    expect(await screen.findByRole('heading', { level: 1 })).toBeTruthy()
+    expect(screen.queryByText('Plan de hoy')).toBeNull()
     const navigation = screen.getByRole('navigation', { name: 'Navegación principal' })
     expect(within(navigation).getAllByRole('button')).toHaveLength(2)
     expect(within(navigation).getByRole('button', { name: 'Hoy' })).toBeTruthy()

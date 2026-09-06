@@ -720,7 +720,6 @@ function TodayView({
   return (
     <section className="today-view enter">
       <div className="today-hero-copy">
-        <span>Plan de hoy</span>
         <RotatingPhrase className="hero-phrase" phrases={foodPhrases} />
       </div>
 
