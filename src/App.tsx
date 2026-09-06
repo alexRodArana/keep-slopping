@@ -509,7 +509,7 @@ function Workspace({ sync }: { sync: ReturnType<typeof useSyncedState<AppState>>
             )}
           </div>
 
-          <ThemeButton mode={themeMode} onChange={setThemeMode} />
+          <ThemeButton mode={themeMode} onChange={setThemeMode} onOpen={() => setAccentOpen(false)} />
         </div>
       </header>
 
