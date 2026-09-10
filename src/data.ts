@@ -1,47 +1,57 @@
 import type { AppState, Meal, PlanTarget } from './types'
 
-export const CURRENT_PLAN_VERSION = 3
+export const CURRENT_PLAN_VERSION = 4
 
 export const defaultTarget: PlanTarget = {
   calories: 2600,
   protein: 160,
-  carbs: 343,
+  carbs: 337,
   fat: 65,
 }
 
+// The source plan gives daily targets only; per-meal nutrition remains an estimate.
 export const defaultMeals: Meal[] = [
   {
     id: 'breakfast',
     name: 'Desayuno',
     ingredients: [
-      { id: 'breakfast-oats', name: 'Avena', amount: '120 g' },
-      { id: 'breakfast-milk', name: 'Leche', amount: '300 ml' },
-      { id: 'breakfast-protein-powder', name: 'Proteina en polvo', amount: '30 g' },
-      { id: 'breakfast-peanut-butter', name: 'Crema de cacahuate', amount: '40 g' },
-      { id: 'breakfast-frozen-strawberries', name: 'Fresas congeladas', amount: '150 g' },
+      { id: 'breakfast-oats', name: 'Avena', amount: '75 g' },
+      { id: 'breakfast-milk', name: 'Leche 0.5%', amount: '200 ml' },
+      { id: 'breakfast-whey', name: 'Whey', amount: '20 g' },
+      { id: 'breakfast-peanut-butter', name: 'Crema de cacahuate', amount: '45 g' },
     ],
-    nutrition: { calories: 983, protein: 60.9, carbs: 108.2, fat: 32.4 },
+    nutrition: { calories: 715, protein: 43.8, carbs: 65.1, fat: 30.1 },
   },
   {
     id: 'lunch',
     name: 'Comida',
     ingredients: [
-      { id: 'lunch-cooked-chicken', name: 'Pechuga de pollo cocida', amount: '90 g' },
-      { id: 'lunch-raw-potato', name: 'Papa cruda', amount: '480 g' },
-      { id: 'lunch-frozen-vegetables', name: 'Verduras congeladas', amount: '200 g' },
+      { id: 'lunch-cooked-chicken', name: 'Pollo cocido', amount: '90 g' },
+      { id: 'lunch-raw-potato', name: 'Papa cruda', amount: '500 g' },
+      { id: 'lunch-vegetables', name: 'Verduras', amount: '200 g' },
     ],
-    nutrition: { calories: 598, protein: 41.5, carbs: 95.6, fat: 4.8 },
+    nutrition: { calories: 614, protein: 41.9, carbs: 99, fat: 4.8 },
+  },
+  {
+    id: 'second-meal',
+    name: 'Segunda comida',
+    ingredients: [
+      { id: 'second-meal-oats', name: 'Avena', amount: '55 g' },
+      { id: 'second-meal-milk', name: 'Leche 0.5%', amount: '100 ml' },
+      { id: 'second-meal-whey', name: 'Whey', amount: '10 g' },
+      { id: 'second-meal-peanut-butter', name: 'Crema de cacahuate', amount: '40 g' },
+    ],
+    nutrition: { calories: 529, protein: 28.6, carbs: 46.6, fat: 25.1 },
   },
   {
     id: 'dinner',
     name: 'Cena',
     ingredients: [
-      { id: 'dinner-cooked-chicken', name: 'Pechuga de pollo cocida', amount: '90 g' },
-      { id: 'dinner-raw-potato', name: 'Papa cruda', amount: '660 g' },
-      { id: 'dinner-frozen-vegetables', name: 'Verduras congeladas', amount: '250 g' },
-      { id: 'dinner-peanut-butter', name: 'Crema de cacahuate', amount: '45 g' },
+      { id: 'dinner-cooked-chicken', name: 'Pollo cocido', amount: '90 g' },
+      { id: 'dinner-raw-potato', name: 'Papa cruda', amount: '640 g' },
+      { id: 'dinner-vegetables', name: 'Verduras', amount: '250 g' },
     ],
-    nutrition: { calories: 1027, protein: 57.4, carbs: 138.7, fat: 27.8 },
+    nutrition: { calories: 741, protein: 45.7, carbs: 126.3, fat: 5.2 },
   },
 ]
 
