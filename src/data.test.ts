@@ -3,45 +3,45 @@ import { CURRENT_PLAN_VERSION, defaultMeals, defaultTarget, initialState } from 
 import { sumNutrition } from './mealUtils'
 
 describe('2773 kcal meal plan', () => {
-  it('contains the exact target, meals, quantities, and nutrition from the PDF', () => {
-    expect(CURRENT_PLAN_VERSION).toBe(5)
+  it('contains the exact economical plan quantities and coherent per-meal estimates', () => {
+    expect(CURRENT_PLAN_VERSION).toBe(6)
     expect(defaultTarget).toEqual({ calories: 2773, protein: 208, carbs: 347, fat: 62 })
     expect(defaultMeals).toEqual([
       {
         id: 'breakfast',
-        name: 'Desayuno',
+        name: '1 - Avena',
         ingredients: [
-          { id: 'breakfast-oats', name: 'Avena (seca)', amount: '115 g' },
-          { id: 'breakfast-milk', name: 'Leche 0.5%', amount: '250 ml' },
-          { id: 'breakfast-whey', name: 'Whey Star Nutrition Whey-80', amount: '55 g' },
-          { id: 'breakfast-peanut-butter', name: 'Crema de cacahuate', amount: '35 g' },
+          { id: 'breakfast-oats', name: 'Avena', amount: '200 g' },
+          { id: 'breakfast-milk', name: 'Leche 0.5%', amount: '500 ml' },
+          { id: 'breakfast-whey', name: 'Whey-80 Cinnamon Bun', amount: '46 g' },
+          { id: 'breakfast-peanut-butter', name: 'Crema de cacahuate', amount: '20 g' },
         ],
-        nutrition: { calories: 939.5, protein: 73.7, carbs: 91.6, fat: 30.9 },
+        nutrition: { calories: 1173.3, protein: 87.6, carbs: 140.7, fat: 28.9 },
       },
       {
         id: 'lunch',
-        name: 'Comida',
+        name: '2 - Pollo',
         ingredients: [
-          { id: 'lunch-cooked-chicken', name: 'Pechuga de pollo (peso cocido)', amount: '120 g' },
-          { id: 'lunch-raw-potato', name: 'Papa (peso crudo)', amount: '500 g' },
-          { id: 'lunch-vegetables', name: 'Verduras mixtas', amount: '200 g' },
+          { id: 'lunch-raw-chicken', name: 'Pechuga de pollo (cruda)', amount: '100 g' },
+          { id: 'lunch-raw-potato', name: 'Papa (cruda)', amount: '305 g' },
+          { id: 'lunch-frozen-vegetables', name: 'Verduras congeladas', amount: '200 g' },
         ],
-        nutrition: { calories: 641.6, protein: 51.2, carbs: 97, fat: 5.4 },
+        nutrition: { calories: 424.9, protein: 32.5, carbs: 65.4, fat: 3.7 },
       },
       {
         id: 'dinner',
-        name: 'Cena',
+        name: '3 - Avena',
         ingredients: [
-          { id: 'dinner-cooked-chicken', name: 'Pechuga de pollo (peso cocido)', amount: '170 g' },
-          { id: 'dinner-raw-potato', name: 'Papa (peso crudo)', amount: '810 g' },
-          { id: 'dinner-vegetables', name: 'Verduras mixtas', amount: '250 g' },
-          { id: 'dinner-peanut-butter', name: 'Crema de cacahuate', amount: '35 g' },
+          { id: 'dinner-oats', name: 'Avena', amount: '200 g' },
+          { id: 'dinner-milk', name: 'Leche 0.5%', amount: '500 ml' },
+          { id: 'dinner-whey', name: 'Whey-80 Cinnamon Bun', amount: '46 g' },
+          { id: 'dinner-peanut-butter', name: 'Crema de cacahuate', amount: '21 g' },
         ],
-        nutrition: { calories: 1191.8, protein: 82.7, carbs: 158.7, fat: 25.2 },
+        nutrition: { calories: 1179.8, protein: 87.9, carbs: 140.9, fat: 29.4 },
       },
     ])
     expect(initialState).toEqual({
-      planVersion: 5,
+      planVersion: 6,
       target: defaultTarget,
       creatineDates: [],
       meals: defaultMeals,
@@ -49,9 +49,9 @@ describe('2773 kcal meal plan', () => {
     })
     expect(defaultMeals.flatMap((meal) => meal.ingredients)).toHaveLength(11)
     const total = sumNutrition(defaultMeals)
-    expect(total.calories).toBeCloseTo(2772.9)
-    expect(total.protein).toBeCloseTo(207.6)
-    expect(total.carbs).toBeCloseTo(347.3)
-    expect(total.fat).toBeCloseTo(61.5)
+    expect(total.calories).toBeCloseTo(2778)
+    expect(total.protein).toBeCloseTo(208)
+    expect(total.carbs).toBeCloseTo(347)
+    expect(total.fat).toBeCloseTo(62)
   })
 })

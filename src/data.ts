@@ -1,6 +1,6 @@
 import type { AppState, Meal, PlanTarget } from './types'
 
-export const CURRENT_PLAN_VERSION = 5
+export const CURRENT_PLAN_VERSION = 6
 
 export const defaultTarget: PlanTarget = {
   calories: 2773,
@@ -9,38 +9,40 @@ export const defaultTarget: PlanTarget = {
   fat: 62,
 }
 
+// The PDF gives daily macros only; these per-meal estimates total 208 P / 347 C / 62 F
+// and the document's macro-derived energy of approximately 2,778 kcal.
 export const defaultMeals: Meal[] = [
   {
     id: 'breakfast',
-    name: 'Desayuno',
+    name: '1 - Avena',
     ingredients: [
-      { id: 'breakfast-oats', name: 'Avena (seca)', amount: '115 g' },
-      { id: 'breakfast-milk', name: 'Leche 0.5%', amount: '250 ml' },
-      { id: 'breakfast-whey', name: 'Whey Star Nutrition Whey-80', amount: '55 g' },
-      { id: 'breakfast-peanut-butter', name: 'Crema de cacahuate', amount: '35 g' },
+      { id: 'breakfast-oats', name: 'Avena', amount: '200 g' },
+      { id: 'breakfast-milk', name: 'Leche 0.5%', amount: '500 ml' },
+      { id: 'breakfast-whey', name: 'Whey-80 Cinnamon Bun', amount: '46 g' },
+      { id: 'breakfast-peanut-butter', name: 'Crema de cacahuate', amount: '20 g' },
     ],
-    nutrition: { calories: 939.5, protein: 73.7, carbs: 91.6, fat: 30.9 },
+    nutrition: { calories: 1173.3, protein: 87.6, carbs: 140.7, fat: 28.9 },
   },
   {
     id: 'lunch',
-    name: 'Comida',
+    name: '2 - Pollo',
     ingredients: [
-      { id: 'lunch-cooked-chicken', name: 'Pechuga de pollo (peso cocido)', amount: '120 g' },
-      { id: 'lunch-raw-potato', name: 'Papa (peso crudo)', amount: '500 g' },
-      { id: 'lunch-vegetables', name: 'Verduras mixtas', amount: '200 g' },
+      { id: 'lunch-raw-chicken', name: 'Pechuga de pollo (cruda)', amount: '100 g' },
+      { id: 'lunch-raw-potato', name: 'Papa (cruda)', amount: '305 g' },
+      { id: 'lunch-frozen-vegetables', name: 'Verduras congeladas', amount: '200 g' },
     ],
-    nutrition: { calories: 641.6, protein: 51.2, carbs: 97, fat: 5.4 },
+    nutrition: { calories: 424.9, protein: 32.5, carbs: 65.4, fat: 3.7 },
   },
   {
     id: 'dinner',
-    name: 'Cena',
+    name: '3 - Avena',
     ingredients: [
-      { id: 'dinner-cooked-chicken', name: 'Pechuga de pollo (peso cocido)', amount: '170 g' },
-      { id: 'dinner-raw-potato', name: 'Papa (peso crudo)', amount: '810 g' },
-      { id: 'dinner-vegetables', name: 'Verduras mixtas', amount: '250 g' },
-      { id: 'dinner-peanut-butter', name: 'Crema de cacahuate', amount: '35 g' },
+      { id: 'dinner-oats', name: 'Avena', amount: '200 g' },
+      { id: 'dinner-milk', name: 'Leche 0.5%', amount: '500 ml' },
+      { id: 'dinner-whey', name: 'Whey-80 Cinnamon Bun', amount: '46 g' },
+      { id: 'dinner-peanut-butter', name: 'Crema de cacahuate', amount: '21 g' },
     ],
-    nutrition: { calories: 1191.8, protein: 82.7, carbs: 158.7, fat: 25.2 },
+    nutrition: { calories: 1179.8, protein: 87.9, carbs: 140.9, fat: 29.4 },
   },
 ]
 
