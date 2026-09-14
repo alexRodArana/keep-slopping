@@ -115,13 +115,13 @@ describe('daily checklist', () => {
     expect(breakfastCard).toBeTruthy()
 
     const card = within(breakfastCard!)
-    expect(card.getByText('Avena')).toBeTruthy()
-    expect(card.getByText('75 g')).toBeTruthy()
-    expect(card.getByText('~715 kcal')).toBeTruthy()
-    expect(card.getByLabelText('Macronutrientes').textContent).toContain('P 43.8 g')
-    expect(card.getByLabelText('Macronutrientes').textContent).toContain('C 65.1 g')
-    expect(card.getByLabelText('Macronutrientes').textContent).toContain('G 30.1 g')
-    expect(screen.getByRole('heading', { name: 'Segunda comida' })).toBeTruthy()
+    expect(card.getByText('Avena (seca)')).toBeTruthy()
+    expect(card.getByText('115 g')).toBeTruthy()
+    expect(card.getByText('~939.5 kcal')).toBeTruthy()
+    expect(card.getByLabelText('Macronutrientes').textContent).toContain('P 73.7 g')
+    expect(card.getByLabelText('Macronutrientes').textContent).toContain('C 91.6 g')
+    expect(card.getByLabelText('Macronutrientes').textContent).toContain('G 30.9 g')
+    expect(screen.queryByRole('heading', { name: 'Segunda comida' })).toBeNull()
     expect(card.queryByText('ligero')).toBeNull()
     expect(card.queryByText(/^\d+\/\d+ ingredientes$/i)).toBeNull()
   })
@@ -136,11 +136,11 @@ describe('daily checklist', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Completar Desayuno' }))
     expect(screen.getByRole('button', { name: 'Marcar Desayuno como pendiente' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Desmarcar Avena de Desayuno' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Desmarcar Avena (seca) de Desayuno' })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Desmarcar Avena de Desayuno' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Desmarcar Avena (seca) de Desayuno' }))
     expect(screen.getByRole('button', { name: 'Completar Desayuno' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Marcar Avena de Desayuno' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Marcar Avena (seca) de Desayuno' })).toBeTruthy()
   })
 
   it('edits the plan manually and reflects the change in the checklist', async () => {
