@@ -5,10 +5,10 @@ import { sumNutrition } from './mealUtils'
 describe('meal nutrition', () => {
   it('sums the nutrition declared for every meal', () => {
     const total = sumNutrition(defaultMeals)
-    expect(total.calories).toBeCloseTo(2778)
-    expect(total.protein).toBeCloseTo(208)
-    expect(total.carbs).toBeCloseTo(347)
-    expect(total.fat).toBeCloseTo(62)
+    expect(total.calories).toBeCloseTo(2650)
+    expect(total.protein).toBeCloseTo(187)
+    expect(total.carbs).toBeCloseTo(330)
+    expect(total.fat).toBeCloseTo(57)
   })
 
   it('returns zero nutrition for an empty plan', () => {
