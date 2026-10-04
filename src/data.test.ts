@@ -4,70 +4,73 @@ import { sumNutrition } from './mealUtils'
 
 describe('2650 kcal meal plan', () => {
   it('contains the exact four meals and quantities with coherent per-meal estimates', () => {
-    expect(CURRENT_PLAN_VERSION).toBe(7)
-    expect(defaultTarget).toEqual({ calories: 2648, protein: 187, carbs: 330, fat: 57 })
+    expect(CURRENT_PLAN_VERSION).toBe(8)
+    expect(defaultTarget).toEqual({ calories: 2650, protein: 160, carbs: 367.5, fat: 60 })
     expect(defaultMeals).toEqual([
       {
         id: 'breakfast',
-        name: '1. Desayuno',
+        name: '1. Desayuno - Avena con fresas',
         ingredients: [
-          { id: 'breakfast-oats', name: 'Avena', amount: '75 g' },
-          { id: 'breakfast-milk', name: 'Leche 0.5%', amount: '200 ml' },
-          { id: 'breakfast-whey', name: 'Whey', amount: '20 g' },
-          { id: 'breakfast-peanut-butter', name: 'Crema de cacahuate', amount: '25 g' },
-          { id: 'breakfast-blueberries', name: 'Blueberries', amount: '100 g' },
-          { id: 'breakfast-yogurt', name: 'Yogurt griego 2% (frosting)', amount: '100 g' },
+          { id: 'breakfast-oats', name: 'Avena seca', amount: '65 g' },
+          { id: 'breakfast-milk', name: 'Leche 0.5%', amount: '250 ml' },
+          { id: 'breakfast-whey', name: 'Whey', amount: '15 g' },
+          { id: 'breakfast-frozen-strawberries', name: 'Fresas congeladas', amount: '200 g' },
+          { id: 'breakfast-peanut-butter', name: 'Crema de cacahuate', amount: '35 g' },
+          { id: 'breakfast-cinnamon-sweetener', name: 'Canela y edulcorante', amount: 'al gusto' },
         ],
-        nutrition: { calories: 723, protein: 48.4, carbs: 78.3, fat: 23.1 },
+        nutrition: { calories: 673.5, protein: 38.8, carbs: 74.9, fat: 24.3 },
       },
       {
         id: 'lunch',
-        name: '2. Comida / PRE-GYM',
+        name: '2. Colacion pre-entreno',
         ingredients: [
-          { id: 'lunch-oats', name: 'Avena', amount: '110 g' },
-          { id: 'lunch-milk', name: 'Leche 0.5%', amount: '200 ml' },
-          { id: 'lunch-whey', name: 'Whey', amount: '20 g' },
-          { id: 'lunch-blueberries', name: 'Blueberries', amount: '70 g' },
-          { id: 'lunch-yogurt', name: 'Yogurt griego 2% (frosting)', amount: '100 g' },
+          { id: 'lunch-rice-cakes', name: 'Rice cakes', amount: '50 g' },
+          { id: 'lunch-honey', name: 'Miel', amount: '25 g' },
         ],
-        nutrition: { calories: 692, protein: 46.2, carbs: 91.8, fat: 12.5 },
+        nutrition: { calories: 282.3, protein: 3.9, carbs: 63.3, fat: 1.5 },
       },
       {
         id: 'post-gym',
-        name: '3. POST-GYM',
+        name: '3. Comida post-entreno - Pollo, papa y crema de cacahuate',
         ingredients: [
-          { id: 'post-gym-oats', name: 'Avena', amount: '65 g' },
-          { id: 'post-gym-milk', name: 'Leche 0.5%', amount: '200 ml' },
-          { id: 'post-gym-whey', name: 'Whey', amount: '20 g' },
-          { id: 'post-gym-peanut-butter', name: 'Crema de cacahuate', amount: '15 g' },
-          { id: 'post-gym-blueberries', name: 'Blueberries', amount: '70 g' },
-          { id: 'post-gym-yogurt', name: 'Yogurt griego 2% (frosting)', amount: '100 g' },
+          { id: 'post-gym-raw-potato', name: 'Papa cruda', amount: '560 g' },
+          { id: 'post-gym-raw-chicken', name: 'Pechuga de pollo cruda', amount: '175 g' },
+          { id: 'post-gym-vegetables', name: 'Verduras', amount: '200 g' },
+          { id: 'post-gym-peanut-butter', name: 'Crema de cacahuate', amount: '20 g' },
         ],
-        nutrition: { calories: 608, protein: 44.1, carbs: 66.7, fat: 17.1 },
+        nutrition: { calories: 826.4, protein: 59.5, carbs: 114.7, fat: 14.4 },
       },
       {
         id: 'dinner',
-        name: '4. Cena',
+        name: '4. Cena - Carne, papa y crema de cacahuate',
         ingredients: [
-          { id: 'dinner-chicken', name: 'Pechuga de pollo', amount: '150 g' },
-          { id: 'dinner-potato', name: 'Papa', amount: '450 g' },
-          { id: 'dinner-frozen-vegetables', name: 'Verduras congeladas', amount: '250 g' },
+          { id: 'dinner-raw-potato', name: 'Papa cruda', amount: '560 g' },
+          { id: 'dinner-raw-ground-beef', name: 'Carne molida 95/5 cruda', amount: '180 g' },
+          { id: 'dinner-vegetables', name: 'Verduras', amount: '200 g' },
+          { id: 'dinner-peanut-butter', name: 'Crema de cacahuate', amount: '20 g' },
         ],
-        nutrition: { calories: 627, protein: 48.3, carbs: 93.2, fat: 4.3 },
+        nutrition: { calories: 867.8, protein: 57.8, carbs: 114.6, fat: 19.8 },
       },
     ])
     expect(initialState).toEqual({
-      planVersion: 7,
+      planVersion: 8,
       target: defaultTarget,
       creatineDates: [],
       meals: defaultMeals,
       sessions: [],
     })
-    expect(defaultMeals.flatMap((meal) => meal.ingredients)).toHaveLength(20)
+    expect(defaultMeals.flatMap((meal) => meal.ingredients)).toHaveLength(16)
+    expect(defaultMeals.some((meal) => meal.id === 'gym')).toBe(false)
+    expect(
+      defaultMeals
+        .flatMap((meal) => meal.ingredients)
+        .filter((ingredient) => ingredient.name === 'Crema de cacahuate')
+        .map((ingredient) => ingredient.amount),
+    ).toEqual(['35 g', '20 g', '20 g'])
     const total = sumNutrition(defaultMeals)
     expect(total.calories).toBeCloseTo(2650)
-    expect(total.protein).toBeCloseTo(187)
-    expect(total.carbs).toBeCloseTo(330)
-    expect(total.fat).toBeCloseTo(57)
+    expect(total.protein).toBeCloseTo(160)
+    expect(total.carbs).toBeCloseTo(367.5)
+    expect(total.fat).toBeCloseTo(60)
   })
 })
