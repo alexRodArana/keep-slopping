@@ -1,61 +1,64 @@
 import type { AppState, Meal, PlanTarget } from './types'
 
-export const CURRENT_PLAN_VERSION = 8
+export const CURRENT_PLAN_VERSION = 9
 
 export const defaultTarget: PlanTarget = {
   calories: 2650,
-  protein: 160,
-  carbs: 367.5,
-  fat: 60,
+  protein: 161,
+  carbs: 365,
+  fat: 59.5,
 }
 
-// The PDF gives only daily approximate protein and fat, with carbohydrates as the
-// remaining calories. These ingredient-weighted per-meal estimates are normalized
-// to 2,650 kcal / 160 P / 367.5 C / 60 F.
+// These are the per-meal values printed in the PDF. Their carbohydrate sum is
+// 364.6 g, which the document rounds to ~365 g in its daily headline.
 export const defaultMeals: Meal[] = [
   {
     id: 'breakfast',
-    name: '1. Desayuno - Avena con fresas',
+    name: '1. Desayuno - cereal con fresas',
     ingredients: [
-      { id: 'breakfast-oats', name: 'Avena seca', amount: '65 g' },
+      { id: 'breakfast-axa-4-korn', name: 'AXA 4 Korn', amount: '65 g' },
       { id: 'breakfast-milk', name: 'Leche 0.5%', amount: '250 ml' },
-      { id: 'breakfast-whey', name: 'Whey', amount: '15 g' },
+      { id: 'breakfast-whey', name: 'Whey', amount: '20 g' },
       { id: 'breakfast-frozen-strawberries', name: 'Fresas congeladas', amount: '200 g' },
-      { id: 'breakfast-peanut-butter', name: 'Crema de cacahuate', amount: '35 g' },
-      { id: 'breakfast-cinnamon-sweetener', name: 'Canela y edulcorante', amount: 'al gusto' },
+      { id: 'breakfast-peanut-butter', name: 'Crema de cacahuate', amount: '30 g' },
+      { id: 'breakfast-cinnamon-sweetener', name: 'Canela y edulcorante', amount: 'Al gusto' },
     ],
-    nutrition: { calories: 673.5, protein: 38.8, carbs: 74.9, fat: 24.3 },
+    nutrition: { calories: 642, protein: 42.1, carbs: 69.2, fat: 20.5 },
   },
   {
     id: 'lunch',
-    name: '2. Colacion pre-entreno',
+    name: '2. Colación pre-entreno',
     ingredients: [
       { id: 'lunch-rice-cakes', name: 'Rice cakes', amount: '50 g' },
-      { id: 'lunch-honey', name: 'Miel', amount: '25 g' },
+      { id: 'lunch-honey', name: 'Miel', amount: '24 g' },
     ],
-    nutrition: { calories: 282.3, protein: 3.9, carbs: 63.3, fat: 1.5 },
+    nutrition: { calories: 274, protein: 3.8, carbs: 59, fat: 1.6 },
   },
   {
     id: 'post-gym',
-    name: '3. Comida post-entreno - Pollo, papa y crema de cacahuate',
+    name: '3. Comida post-entreno',
     ingredients: [
-      { id: 'post-gym-raw-potato', name: 'Papa cruda', amount: '560 g' },
-      { id: 'post-gym-raw-chicken', name: 'Pechuga de pollo cruda', amount: '175 g' },
+      { id: 'post-gym-raw-potato', name: 'Papa, peso crudo', amount: '610 g' },
+      {
+        id: 'post-gym-raw-chicken-thigh',
+        name: 'Kylling lårfilet (muslo de pollo sin piel), crudo',
+        amount: '175 g',
+      },
       { id: 'post-gym-vegetables', name: 'Verduras', amount: '200 g' },
-      { id: 'post-gym-peanut-butter', name: 'Crema de cacahuate', amount: '20 g' },
+      { id: 'post-gym-pumpkin-seeds', name: 'Semillas de calabaza', amount: '16 g' },
     ],
-    nutrition: { calories: 826.4, protein: 59.5, carbs: 114.7, fat: 14.4 },
+    nutrition: { calories: 862, protein: 53.5, carbs: 118.2, fat: 20 },
   },
   {
     id: 'dinner',
-    name: '4. Cena - Carne, papa y crema de cacahuate',
+    name: '4. Cena',
     ingredients: [
-      { id: 'dinner-raw-potato', name: 'Papa cruda', amount: '560 g' },
-      { id: 'dinner-raw-ground-beef', name: 'Carne molida 95/5 cruda', amount: '180 g' },
+      { id: 'dinner-raw-potato', name: 'Papa, peso crudo', amount: '610 g' },
+      { id: 'dinner-raw-ground-beef', name: 'Carne molida 5%, cruda', amount: '180 g' },
       { id: 'dinner-vegetables', name: 'Verduras', amount: '200 g' },
-      { id: 'dinner-peanut-butter', name: 'Crema de cacahuate', amount: '20 g' },
+      { id: 'dinner-pumpkin-seeds', name: 'Semillas de calabaza', amount: '16 g' },
     ],
-    nutrition: { calories: 867.8, protein: 57.8, carbs: 114.6, fat: 19.8 },
+    nutrition: { calories: 872, protein: 61.6, carbs: 118.2, fat: 17.4 },
   },
 ]
 

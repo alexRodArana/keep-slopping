@@ -4,20 +4,21 @@ import AxeBuilder from '@axe-core/playwright'
 test('meal and creatine checklists persist and edits do not double-count meals', async ({ page }, info) => {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
+  await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
   await page.getByRole('button', { name: /Creatina/ }).click()
-  await page.getByRole('button', { name: 'Completar 1. Desayuno - Avena con fresas', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Marcar 1. Desayuno - Avena con fresas como pendiente' })).toBeVisible()
-  await expect(page.locator('.metric-card').filter({ hasText: 'Registrado' })).toContainText('673.5')
+  await page.getByRole('button', { name: 'Completar 1. Desayuno - cereal con fresas', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Marcar 1. Desayuno - cereal con fresas como pendiente' })).toBeVisible()
+  await expect(page.locator('.metric-card').filter({ hasText: 'Registrado' })).toContainText('642')
   await page.screenshot({ path: info.outputPath('checklist.png'), fullPage: true })
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Marcar 1. Desayuno - Avena con fresas como pendiente' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Marcar 1. Desayuno - cereal con fresas como pendiente' })).toBeVisible()
   await expect(page.getByRole('button', { name: /Creatina/ })).toContainText('Hecho')
-  await page.getByRole('button', { name: 'Marcar 1. Desayuno - Avena con fresas como pendiente' }).click()
-  await page.getByRole('button', { name: 'Completar 1. Desayuno - Avena con fresas', exact: true }).click()
-  await expect(page.locator('.metric-card').filter({ hasText: 'Registrado' })).toContainText('673.5')
+  await page.getByRole('button', { name: 'Marcar 1. Desayuno - cereal con fresas como pendiente' }).click()
+  await page.getByRole('button', { name: 'Completar 1. Desayuno - cereal con fresas', exact: true }).click()
+  await expect(page.locator('.metric-card').filter({ hasText: 'Registrado' })).toContainText('642')
   await page.getByRole('button', { name: 'Plan', exact: true }).click()
-  await page.getByRole('button', { name: 'Editar 1. Desayuno - Avena con fresas', exact: true }).click()
+  await page.getByRole('button', { name: 'Editar 1. Desayuno - cereal con fresas', exact: true }).click()
   await page.getByLabel('Comida', { exact: true }).fill('Desayuno editado')
   await page.screenshot({ path: info.outputPath('editor.png'), fullPage: true, animations: 'disabled' })
   const editorAccessibility = await new AxeBuilder({ page }).disableRules(['meta-viewport']).analyze()
@@ -29,7 +30,7 @@ test('meal and creatine checklists persist and edits do not double-count meals',
 
 test('shared appearance, contrast, responsive layout and logo rendering', async ({ page }, info) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: '1. Desayuno - Avena con fresas', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '1. Desayuno - cereal con fresas', exact: true })).toBeVisible()
   await expect(page.getByText('Plan de hoy', { exact: true })).toHaveCount(0)
   for (const theme of ['dark', 'light']) {
     await page.emulateMedia({ colorScheme: theme as 'dark' | 'light' })
