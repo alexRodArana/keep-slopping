@@ -10,11 +10,7 @@ export const defaultTarget: PlanTarget = {
   fat: 60,
 }
 
-export const defaultPlanNotes = [
-  'Pesa los sólidos en crudo o seco. No se incluye aceite ni extras.',
-  'Elige fresas o moras azules en cada porción de fruta; no consumas ambas juntas.',
-  'Las calorías son estimadas y los macros diarios son de referencia. Con moras azules, los macros pueden variar ligeramente.',
-]
+export const defaultPlanNotes: string[] = []
 
 const estimatedNutrition = (calories: number): Nutrition => ({
   calories,

@@ -1017,6 +1017,7 @@ function MealChecklistCard({
                 key={option.id}
               >
                 <input
+                  aria-label={option.name}
                   checked={option.id === selectedOption?.id}
                   name={`meal-option-${meal.id}`}
                   type="radio"
@@ -1024,7 +1025,7 @@ function MealChecklistCard({
                   onChange={() => selectMealOption(meal.id, option.id)}
                 />
                 <span>
-                  <strong>{option.name}</strong>
+                  <strong>{option.name.replace(/^Opción ([A-Z])\s*[-:]\s*/, '$1 · ').replace(/ sin PB2$/, '')}</strong>
                   <small>
                     ~{formatNumber(option.nutrition.calories)} kcal
                     {option.nutrition.protein !== null && ` · P ${formatNumber(option.nutrition.protein)} g`}

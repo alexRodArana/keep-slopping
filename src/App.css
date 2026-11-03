@@ -1844,12 +1844,68 @@ textarea:focus-visible {
   }
 
   .meal-option-picker {
-    padding-right: 13px;
-    padding-left: 59px;
+    padding: 3px 13px 13px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .meal-option-picker legend {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .meal-option-grid {
     grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--field);
+  }
+
+  .meal-option-choice {
+    min-height: 46px;
+    gap: 10px;
+    padding: 10px;
+    border-color: transparent;
+    border-radius: 6px;
+    background: transparent;
+  }
+
+  .meal-option-choice > span {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .meal-option-choice strong {
+    font-size: 0.76rem;
+    overflow-wrap: normal;
+  }
+
+  .meal-option-choice small {
+    white-space: nowrap;
+    font-size: 0.66rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .meal-checklist.complete .meal-option-grid {
+    border-color: color-mix(in srgb, var(--on-brand) 24%, transparent);
+    background: color-mix(in srgb, var(--on-brand) 6%, transparent);
+  }
+
+  .meal-checklist.complete .meal-option-choice {
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .meal-checklist.complete .meal-option-choice.selected {
+    background: var(--on-brand);
   }
 
   .linked-option-status {

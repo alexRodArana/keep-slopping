@@ -119,7 +119,7 @@ describe('five-time meal plan without PB2', () => {
     ])
     expect(ingredients.some(({ name }) => /PB2/i.test(name))).toBe(false)
     expect(ingredients.filter(({ name }) => name.includes('moras azules'))).toHaveLength(3)
-    expect(defaultPlanNotes.some((note) => note.includes('no consumas ambas juntas'))).toBe(true)
+    expect(defaultPlanNotes).toEqual([])
   })
 
   it('preserves meal-level calorie estimates without inventing missing macros', () => {
