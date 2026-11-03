@@ -1,86 +1,132 @@
 import { describe, expect, it } from 'vitest'
-import { CURRENT_PLAN_VERSION, defaultMeals, defaultTarget, initialState } from './data'
+import { CURRENT_PLAN_VERSION, defaultMeals, defaultPlanNotes, defaultTarget, initialState } from './data'
 import { sumNutrition } from './mealUtils'
 
-describe('2650 kcal meal plan', () => {
-  it('contains the exact four meals and quantities with coherent per-meal estimates', () => {
-    expect(CURRENT_PLAN_VERSION).toBe(9)
-    expect(defaultTarget).toEqual({ calories: 2650, protein: 161, carbs: 365, fat: 59.5 })
-    expect(defaultMeals).toEqual([
-      {
-        id: 'breakfast',
-        name: '1. Desayuno - cereal con fresas',
-        ingredients: [
-          { id: 'breakfast-axa-4-korn', name: 'AXA 4 Korn', amount: '65 g' },
-          { id: 'breakfast-milk', name: 'Leche 0.5%', amount: '250 ml' },
-          { id: 'breakfast-whey', name: 'Whey', amount: '20 g' },
-          { id: 'breakfast-frozen-strawberries', name: 'Fresas congeladas', amount: '200 g' },
-          { id: 'breakfast-peanut-butter', name: 'Crema de cacahuate', amount: '30 g' },
-          { id: 'breakfast-cinnamon-sweetener', name: 'Canela y edulcorante', amount: 'Al gusto' },
-        ],
-        nutrition: { calories: 642, protein: 42.1, carbs: 69.2, fat: 20.5 },
-      },
-      {
-        id: 'lunch',
-        name: '2. Colación pre-entreno',
-        ingredients: [
-          { id: 'lunch-rice-cakes', name: 'Rice cakes', amount: '50 g' },
-          { id: 'lunch-honey', name: 'Miel', amount: '24 g' },
-        ],
-        nutrition: { calories: 274, protein: 3.8, carbs: 59, fat: 1.6 },
-      },
-      {
-        id: 'post-gym',
-        name: '3. Comida post-entreno',
-        ingredients: [
-          { id: 'post-gym-raw-potato', name: 'Papa, peso crudo', amount: '610 g' },
-          {
-            id: 'post-gym-raw-chicken-thigh',
-            name: 'Kylling lårfilet (muslo de pollo sin piel), crudo',
-            amount: '175 g',
-          },
-          { id: 'post-gym-vegetables', name: 'Verduras', amount: '200 g' },
-          { id: 'post-gym-pumpkin-seeds', name: 'Semillas de calabaza', amount: '16 g' },
-        ],
-        nutrition: { calories: 862, protein: 53.5, carbs: 118.2, fat: 20 },
-      },
-      {
-        id: 'dinner',
-        name: '4. Cena',
-        ingredients: [
-          { id: 'dinner-raw-potato', name: 'Papa, peso crudo', amount: '610 g' },
-          { id: 'dinner-raw-ground-beef', name: 'Carne molida 5%, cruda', amount: '180 g' },
-          { id: 'dinner-vegetables', name: 'Verduras', amount: '200 g' },
-          { id: 'dinner-pumpkin-seeds', name: 'Semillas de calabaza', amount: '16 g' },
-        ],
-        nutrition: { calories: 872, protein: 61.6, carbs: 118.2, fat: 17.4 },
-      },
-    ])
+describe('five-time meal plan without PB2', () => {
+  it('uses the exact daily ceiling and reference macros in plan version 11', () => {
+    expect(CURRENT_PLAN_VERSION).toBe(11)
+    expect(defaultTarget).toEqual({ calories: 2822, protein: 148, carbs: 431, fat: 60 })
+    expect(defaultMeals).toHaveLength(5)
     expect(initialState).toEqual({
-      planVersion: 9,
+      planVersion: 11,
       target: defaultTarget,
+      planNotes: defaultPlanNotes,
       creatineDates: [],
       meals: defaultMeals,
       sessions: [],
     })
-    expect(defaultMeals.flatMap((meal) => meal.ingredients)).toHaveLength(16)
-    expect(defaultMeals.some((meal) => meal.id === 'gym')).toBe(false)
-    expect(
-      defaultMeals
-        .flatMap((meal) => meal.ingredients)
-        .filter((ingredient) => ingredient.name === 'Semillas de calabaza')
-        .map((ingredient) => ingredient.amount),
-    ).toEqual(['16 g', '16 g'])
-    expect(
-      defaultMeals
-        .flatMap((meal) => meal.ingredients)
-        .filter((ingredient) => ingredient.name === 'Crema de cacahuate')
-        .map((ingredient) => ingredient.amount),
-    ).toEqual(['30 g'])
-    const total = sumNutrition(defaultMeals)
-    expect(total.calories).toBeCloseTo(2650)
-    expect(total.protein).toBeCloseTo(161)
-    expect(total.carbs).toBeCloseTo(364.6)
-    expect(total.fat).toBeCloseTo(59.5)
+  })
+
+  it('preserves every fixed ingredient and portion from the PDF', () => {
+    expect(defaultMeals.slice(0, 4).map(({ id, name, ingredients, nutrition }) => ({
+      id,
+      name,
+      ingredients: ingredients.map(({ name: ingredient, amount }) => [ingredient, amount]),
+      nutrition,
+    }))).toEqual([
+      {
+        id: 'breakfast',
+        name: '1. Desayuno | Avena',
+        ingredients: [
+          ['Avena seca', '107 g'],
+          ['Leche 0.5%', '300 ml'],
+          ['Proteína whey', '29 g'],
+          ['Fresas congeladas o moras azules', '200 g de fresas o 112 g de moras azules'],
+          ['Crema de cacahuate tradicional', '25 g'],
+        ],
+        nutrition: { calories: 865, protein: null, carbs: null, fat: null },
+      },
+      {
+        id: 'lunch',
+        name: 'Colación preentreno | Arroz inflado y miel',
+        ingredients: [
+          ['Arroz inflado natural (seco)', '53 g'],
+          ['Miel', '25 g'],
+        ],
+        nutrition: { calories: 276, protein: null, carbs: null, fat: null },
+      },
+      {
+        id: 'post-gym-first',
+        name: '2. Postentreno, primera parte',
+        ingredients: [
+          ['Pechuga de pollo, en crudo', '48 g'],
+          ['Papa, en crudo', '450 g'],
+          ['Verduras congeladas', '125 g'],
+          ['Semillas de calabaza', '12 g'],
+        ],
+        nutrition: { calories: 510, protein: null, carbs: null, fat: null },
+      },
+      {
+        id: 'post-gym-second',
+        name: '3. Postentreno, segunda parte',
+        ingredients: [
+          ['Pechuga de pollo, en crudo', '47 g'],
+          ['Papa, en crudo', '450 g'],
+          ['Verduras congeladas', '125 g'],
+          ['Semillas de calabaza', '13 g'],
+        ],
+        nutrition: { calories: 515, protein: null, carbs: null, fat: null },
+      },
+    ])
+    expect(defaultMeals[1].options).toBeUndefined()
+    expect(defaultMeals[1].optionSourceMealId).toBeUndefined()
+  })
+
+  it('keeps the two dinner alternatives exclusive and their exact portions', () => {
+    const dinner = defaultMeals[4]
+    expect(dinner.id).toBe('dinner')
+    expect(dinner.name).toBe('4. Cena | Elige UNA opción')
+    expect(dinner.defaultOptionId).toBe('dinner-a')
+    expect(dinner.options).toHaveLength(2)
+    expect(dinner.options?.map(({ id, name, ingredients, nutrition }) => ({
+      id,
+      name,
+      ingredients: ingredients.map(({ name: ingredient, amount }) => [ingredient, amount]),
+      nutrition,
+    }))).toEqual([
+      {
+        id: 'dinner-a',
+        name: 'Opción A - Avena sin PB2',
+        ingredients: [
+          ['Avena seca', '97 g'],
+          ['Leche 0.5%', '150 ml'],
+          ['Proteína whey', '6 g'],
+          ['Fresas congeladas o moras azules', '150 g de fresas o 84 g de moras azules'],
+          ['Crema de cacahuate tradicional', '24 g'],
+        ],
+        nutrition: { calories: 648, protein: null, carbs: null, fat: null },
+      },
+      {
+        id: 'dinner-b',
+        name: 'Opción B - Pollo con papa',
+        ingredients: [
+          ['Pechuga de pollo, en crudo', '42 g'],
+          ['Papa, en crudo', '420 g'],
+          ['Verduras congeladas', '200 g'],
+          ['Semillas de calabaza', '38 g'],
+        ],
+        nutrition: { calories: 652, protein: null, carbs: null, fat: null },
+      },
+    ])
+    expect(dinner.ingredients).toEqual(dinner.options?.[0].ingredients)
+    expect(dinner.nutrition).toEqual(dinner.options?.[0].nutrition)
+  })
+
+  it('contains no PB2 ingredient and preserves the exclusive fruit replacements', () => {
+    const ingredients = defaultMeals.flatMap((meal) => [
+      ...meal.ingredients,
+      ...(meal.options?.flatMap((option) => option.ingredients) ?? []),
+    ])
+    expect(ingredients.some(({ name }) => /PB2/i.test(name))).toBe(false)
+    expect(ingredients.filter(({ name }) => name.includes('moras azules'))).toHaveLength(3)
+    expect(defaultPlanNotes.some((note) => note.includes('no consumas ambas juntas'))).toBe(true)
+  })
+
+  it('preserves meal-level calorie estimates without inventing missing macros', () => {
+    expect(sumNutrition(defaultMeals)).toEqual({ calories: 2814, protein: null, carbs: null, fat: null })
+    const routeB = defaultMeals.map((meal) => meal.id === 'dinner'
+      ? { ...meal, defaultOptionId: 'dinner-b' }
+      : meal)
+    expect(sumNutrition(routeB)).toEqual({ calories: 2818, protein: null, carbs: null, fat: null })
   })
 })

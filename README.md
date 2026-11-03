@@ -24,6 +24,8 @@ IndexedDB mantiene cache por app y usuario y cambios pendientes. La sincronizaci
 
 Para una instalacion nueva de Supabase, ejecutar primero `supabase/schema.sql` y despues `supabase/migrations/202609050001_incremental_sync.sql` del repositorio The Goy Project. No basta con instalar solo el esquema antiguo. Ambos frontends requieren esa migracion. Las pruebas SQL estan en `supabase/tests/incremental_sync.sql` del mismo repositorio.
 
+Despues, ejecutar `supabase/migrations/202611030001_plan_notes.sql` de este repositorio para permitir las indicaciones del plan en la sincronizacion incremental.
+
 ## Publicacion
 
 [Keep Slopping](https://alexrodarana.github.io/keep-slopping/). Cada push a `main` ejecuta las comprobaciones y publica mediante GitHub Actions. Pages debe estar configurado para GitHub Actions; sus secrets son las dos variables publicas de Supabase indicadas arriba.

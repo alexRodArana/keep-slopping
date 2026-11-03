@@ -14,6 +14,7 @@ audit-artifacts/
 dist
 dist-ssr
 *.local
+supabase/.temp/
 
 # Local source material with personal data
 inbox/

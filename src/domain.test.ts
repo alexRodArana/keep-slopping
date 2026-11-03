@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { formatNumber, getLatestMealSession, getMealSessionsForDate, isMealSessionComplete, upsertMealSession } from './domain'
+import {
+  formatNumber,
+  getLatestMealSession,
+  getMealSessionsForDate,
+  isMealSessionComplete,
+  resolveMealIngredients,
+  resolveMealNutrition,
+  resolveMealOption,
+  upsertMealSession,
+} from './domain'
 import type { Meal, MealSession } from './types'
 
 const meal: Meal = {
@@ -22,6 +31,31 @@ const session = (patch: Partial<MealSession> = {}): MealSession => ({
   completed: true,
   ...patch,
 })
+
+const choiceMeal: Meal = {
+  id: 'dinner',
+  name: 'Cena',
+  ingredients: [{ id: 'a-oats', name: 'Avena', amount: '90 g' }],
+  nutrition: { calories: 656, protein: 33.3, carbs: 88.2, fat: 20.4 },
+  defaultOptionId: 'dinner-a',
+  options: [
+    {
+      id: 'dinner-a',
+      name: 'Opción A',
+      ingredients: [{ id: 'a-oats', name: 'Avena', amount: '90 g' }],
+      nutrition: { calories: 656, protein: 33.3, carbs: 88.2, fat: 20.4 },
+    },
+    {
+      id: 'dinner-b',
+      name: 'Opción B',
+      ingredients: [
+        { id: 'b-chicken', name: 'Pechuga de pollo', amount: '42 g' },
+        { id: 'b-potato', name: 'Papa', amount: '420 g' },
+      ],
+      nutrition: { calories: 652, protein: 33.5, carbs: 87.5, fat: 20.6 },
+    },
+  ],
+}
 
 describe('checklist domain', () => {
   it('indexes only the latest session for every meal on the selected local day', () => {
@@ -53,5 +87,38 @@ describe('checklist domain', () => {
     expect(isMealSessionComplete(session(), meal)).toBe(true)
     expect(isMealSessionComplete(session({ checkedIngredientIds: ['oats'] }), meal)).toBe(false)
     expect(isMealSessionComplete(session(), { ...meal, ingredients: [] })).toBe(false)
+  })
+
+  it('resolves the default or selected option while keeping flat meals compatible', () => {
+    expect(resolveMealOption(choiceMeal)?.id).toBe('dinner-a')
+    expect(resolveMealOption(choiceMeal, 'dinner-b')?.id).toBe('dinner-b')
+    expect(resolveMealIngredients(choiceMeal)).toEqual(choiceMeal.options?.[0].ingredients)
+    expect(resolveMealNutrition(choiceMeal, 'dinner-b')).toEqual(choiceMeal.options?.[1].nutrition)
+    expect(resolveMealOption(choiceMeal, 'unknown')).toBeUndefined()
+    expect(resolveMealIngredients(choiceMeal, 'unknown')).toEqual([])
+    expect(resolveMealNutrition(choiceMeal, 'unknown')).toBeUndefined()
+
+    expect(resolveMealOption(meal)).toBeUndefined()
+    expect(resolveMealIngredients(meal)).toBe(meal.ingredients)
+    expect(resolveMealNutrition(meal)).toBe(meal.nutrition)
+  })
+
+  it('requires one valid explicit option and only its ingredients for completion', () => {
+    const optionASession = session({
+      mealId: choiceMeal.id,
+      optionId: 'dinner-a',
+      checkedIngredientIds: ['a-oats'],
+    })
+    const optionBSession = session({
+      mealId: choiceMeal.id,
+      optionId: 'dinner-b',
+      checkedIngredientIds: ['b-chicken', 'b-potato'],
+    })
+
+    expect(isMealSessionComplete(optionASession, choiceMeal)).toBe(true)
+    expect(isMealSessionComplete(optionBSession, choiceMeal)).toBe(true)
+    expect(isMealSessionComplete({ ...optionASession, optionId: undefined }, choiceMeal)).toBe(false)
+    expect(isMealSessionComplete({ ...optionASession, optionId: 'unknown' }, choiceMeal)).toBe(false)
+    expect(isMealSessionComplete({ ...optionBSession, checkedIngredientIds: ['a-oats'] }, choiceMeal)).toBe(false)
   })
 })

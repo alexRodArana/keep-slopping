@@ -1,4 +1,4 @@
-import type { Meal, MealSession } from './types'
+import type { Ingredient, Meal, MealOption, MealSession, Nutrition } from './types'
 
 const dateFormatter = new Intl.DateTimeFormat('es-MX', {
   day: 'numeric',
@@ -71,14 +71,44 @@ export const upsertMealSession = (sessions: MealSession[], nextSession: MealSess
   return [...remaining.slice(0, insertAt), nextSession, ...remaining.slice(insertAt)]
 }
 
+export const resolveMealOption = (meal: Meal, optionId?: string): MealOption | undefined => {
+  if (!meal.options?.length) {
+    return undefined
+  }
+
+  const resolvedOptionId = optionId ?? meal.defaultOptionId
+  return meal.options.find((option) => option.id === resolvedOptionId)
+}
+
+export const resolveMealIngredients = (meal: Meal, optionId?: string): Ingredient[] => {
+  if (!meal.options?.length) {
+    return meal.ingredients
+  }
+
+  return resolveMealOption(meal, optionId)?.ingredients ?? []
+}
+
+export const resolveMealNutrition = (meal: Meal, optionId?: string): Nutrition | undefined => {
+  if (!meal.options?.length) {
+    return meal.nutrition
+  }
+
+  return resolveMealOption(meal, optionId)?.nutrition
+}
+
 export const isMealSessionComplete = (
-  session: Pick<MealSession, 'checkedIngredientIds'>,
+  session: Pick<MealSession, 'checkedIngredientIds' | 'optionId'>,
   meal: Meal,
 ) => {
-  if (!meal.ingredients.length) {
+  if (meal.options?.length && !session.optionId) {
+    return false
+  }
+
+  const ingredients = resolveMealIngredients(meal, session.optionId)
+  if (!ingredients.length) {
     return false
   }
 
   const checkedIds = new Set(session.checkedIngredientIds)
-  return meal.ingredients.every((ingredient) => checkedIds.has(ingredient.id))
+  return ingredients.every((ingredient) => checkedIds.has(ingredient.id))
 }

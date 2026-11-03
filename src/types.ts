@@ -12,18 +12,28 @@ export type Ingredient = {
 
 export type Nutrition = {
   calories: number
-  protein: number
-  carbs: number
-  fat: number
+  protein: number | null
+  carbs: number | null
+  fat: number | null
 }
 
 export type PlanTarget = Nutrition
+
+export type MealOption = {
+  id: string
+  name: string
+  ingredients: Ingredient[]
+  nutrition: Nutrition
+}
 
 export type Meal = {
   id: string
   name: string
   ingredients: Ingredient[]
   nutrition: Nutrition
+  options?: MealOption[]
+  defaultOptionId?: string
+  optionSourceMealId?: string
 }
 
 export type MealSession = {
@@ -34,11 +44,13 @@ export type MealSession = {
   endedAt: string
   checkedIngredientIds: string[]
   completed: boolean
+  optionId?: string
 }
 
 export type AppState = {
   planVersion: number
   target: PlanTarget
+  planNotes?: string[]
   creatineDates: string[]
   meals: Meal[]
   sessions: MealSession[]

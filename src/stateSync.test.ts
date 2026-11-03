@@ -26,6 +26,16 @@ describe('incremental state changes', () => {
     expect(mergePendingState(base, local, base).sessions).toEqual(local.sessions)
   })
 
+  it('replaces the dinner selection for the same day without duplicating dinner or changing other days', () => {
+    const yesterday = { id: 'yesterday', mealId: 'dinner', date: '2026-11-02', optionId: 'dinner-a', completed: true }
+    const today = { id: 'today', mealId: 'dinner', date: '2026-11-03', optionId: 'dinner-a', completed: true }
+    const base = { sessions: [yesterday, today] }
+    const local = { sessions: [yesterday, { ...today, optionId: 'dinner-b', completed: false }] }
+    const patch = buildStatePatch(local, base)
+    expect(patch.changes.sessions).toEqual({ upsert: [local.sessions[1]], remove: [] })
+    expect(mergePendingState(base, local, base).sessions).toEqual(local.sessions)
+  })
+
   it('preserves repeated rotation slots and explicit false/null preferences', () => {
     expect(buildStatePatch({ routineRotation: ['legs', 'arms', 'legs'], cardioEnabled: false, activeWorkout: undefined },
       { routineRotation: ['legs'], cardioEnabled: true, activeWorkout: { id: 'a' } } as never)).toEqual({

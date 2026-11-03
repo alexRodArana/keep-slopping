@@ -40,6 +40,8 @@ import {
   getLatestMealSession,
   getMealSessionsForDate,
   isMealSessionComplete,
+  resolveMealNutrition,
+  resolveMealOption,
   todayIso,
   upsertMealSession,
 } from './domain'
@@ -58,7 +60,7 @@ import {
   signUpWithEmail,
   type SyncSession,
 } from './supabase'
-import type { AppState, Ingredient, Meal, MealSession, Nutrition, TabKey } from './types'
+import type { AppState, Ingredient, Meal, MealOption, MealSession, Nutrition, TabKey } from './types'
 
 const brandMarkSrc = `${import.meta.env.BASE_URL}app-icon-192.png`
 
@@ -250,7 +252,64 @@ function Workspace({ sync }: { sync: ReturnType<typeof useSyncedState<AppState>>
     }
   }
 
-  const updateTodaySession = (mealId: string, nextCheckedIds: (current: string[], meal: Meal) => string[]) => {
+  const selectMealOption = (mealId: string, optionId: string) => {
+    vibrate(8)
+    setState((current) => {
+      const meal = getMeal(current.meals, mealId)
+      const option = meal ? resolveMealOption(meal, optionId) : undefined
+      if (!meal || !option) {
+        return current
+      }
+
+      const date = todayIso()
+      const previous = getLatestMealSession(current.sessions, mealId, date)
+      if (previous?.optionId === option.id) {
+        return current
+      }
+
+      const timestamp = new Date().toISOString()
+      const nextSession: MealSession = {
+        id: previous?.id ?? createId('meal-session'),
+        mealId,
+        optionId: option.id,
+        date,
+        startedAt: previous?.startedAt ?? timestamp,
+        endedAt: timestamp,
+        checkedIngredientIds: [],
+        completed: false,
+      }
+      let sessions = upsertMealSession(current.sessions, nextSession)
+
+      current.meals
+        .filter((candidate) => candidate.optionSourceMealId === mealId)
+        .forEach((linkedMeal) => {
+          if (!resolveMealOption(linkedMeal, option.id)) {
+            return
+          }
+
+          const linkedSession = getLatestMealSession(sessions, linkedMeal.id, date)
+          if (!linkedSession || linkedSession.optionId === option.id) {
+            return
+          }
+
+          sessions = upsertMealSession(sessions, {
+            ...linkedSession,
+            optionId: option.id,
+            endedAt: timestamp,
+            checkedIngredientIds: [],
+            completed: false,
+          })
+        })
+
+      return { ...current, sessions }
+    })
+  }
+
+  const updateTodaySession = (
+    mealId: string,
+    optionId: string | undefined,
+    nextCheckedIds: (current: string[], ingredients: Ingredient[]) => string[],
+  ) => {
     vibrate(8)
     setState((current) => {
       const meal = getMeal(current.meals, mealId)
@@ -258,40 +317,50 @@ function Workspace({ sync }: { sync: ReturnType<typeof useSyncedState<AppState>>
         return current
       }
 
+      const option = meal.options?.length ? resolveMealOption(meal, optionId) : undefined
+      if (meal.options?.length && !option) {
+        return current
+      }
+
       const date = todayIso()
       const previous = getLatestMealSession(current.sessions, mealId, date)
-      const validIds = new Set(meal.ingredients.map((ingredient) => ingredient.id))
+      const ingredients = option?.ingredients ?? meal.ingredients
+      const canResume = !meal.options?.length || previous?.optionId === option?.id
+      const validIds = new Set(ingredients.map((ingredient) => ingredient.id))
       const checkedIngredientIds = [
-        ...new Set(nextCheckedIds(previous?.checkedIngredientIds ?? [], meal).filter((id) => validIds.has(id))),
+        ...new Set(
+          nextCheckedIds(canResume ? (previous?.checkedIngredientIds ?? []) : [], ingredients)
+            .filter((id) => validIds.has(id)),
+        ),
       ]
       const timestamp = new Date().toISOString()
       const nextSession: MealSession = {
         id: previous?.id ?? createId('meal-session'),
         mealId,
+        ...(option ? { optionId: option.id } : {}),
         date,
         startedAt: previous?.startedAt ?? timestamp,
         endedAt: timestamp,
         checkedIngredientIds,
-        completed:
-          meal.ingredients.length > 0 && meal.ingredients.every((ingredient) => checkedIngredientIds.includes(ingredient.id)),
+        completed: ingredients.length > 0 && ingredients.every((ingredient) => checkedIngredientIds.includes(ingredient.id)),
       }
 
       return { ...current, sessions: upsertMealSession(current.sessions, nextSession) }
     })
   }
 
-  const toggleIngredient = (mealId: string, ingredientId: string) => {
-    updateTodaySession(mealId, (checkedIds) =>
+  const toggleIngredient = (mealId: string, optionId: string | undefined, ingredientId: string) => {
+    updateTodaySession(mealId, optionId, (checkedIds) =>
       checkedIds.includes(ingredientId)
         ? checkedIds.filter((id) => id !== ingredientId)
         : [...checkedIds, ingredientId],
     )
   }
 
-  const toggleMeal = (mealId: string) => {
-    updateTodaySession(mealId, (checkedIds, meal) => {
-      const complete = meal.ingredients.length > 0 && meal.ingredients.every((ingredient) => checkedIds.includes(ingredient.id))
-      return complete ? [] : meal.ingredients.map((ingredient) => ingredient.id)
+  const toggleMeal = (mealId: string, optionId?: string) => {
+    updateTodaySession(mealId, optionId, (checkedIds, ingredients) => {
+      const complete = ingredients.length > 0 && ingredients.every((ingredient) => checkedIds.includes(ingredient.id))
+      return complete ? [] : ingredients.map((ingredient) => ingredient.id)
     })
   }
 
@@ -318,28 +387,82 @@ function Workspace({ sync }: { sync: ReturnType<typeof useSyncedState<AppState>>
     }))
   }
 
-  const updateMealNutrition = (mealId: string, patch: Partial<Nutrition>) => {
+  const updateMealOption = (mealId: string, optionId: string, patch: Partial<MealOption>) => {
     setState((current) => ({
       ...current,
       meals: current.meals.map((meal) =>
-        meal.id === mealId ? { ...meal, nutrition: { ...meal.nutrition, ...patch } } : meal,
+        meal.id === mealId && meal.options?.length
+          ? {
+              ...meal,
+              options: meal.options.map((option) => option.id === optionId ? { ...option, ...patch } : option),
+            }
+          : meal,
       ),
     }))
   }
 
-  const updateIngredient = (mealId: string, ingredientId: string, patch: Partial<Ingredient>) => {
+  const updateMealNutrition = (mealId: string, optionId: string | undefined, patch: Partial<Nutrition>) => {
     setState((current) => ({
       ...current,
-      meals: current.meals.map((meal) =>
-        meal.id === mealId
-          ? {
-              ...meal,
-              ingredients: meal.ingredients.map((ingredient) =>
-                ingredient.id === ingredientId ? { ...ingredient, ...patch } : ingredient,
-              ),
-            }
-          : meal,
-      ),
+      meals: current.meals.map((meal) => {
+        if (meal.id !== mealId) {
+          return meal
+        }
+        if (!optionId || !meal.options?.length) {
+          return { ...meal, nutrition: { ...meal.nutrition, ...patch } }
+        }
+
+        const options = meal.options.map((option) =>
+          option.id === optionId ? { ...option, nutrition: { ...option.nutrition, ...patch } } : option,
+        )
+        const updatedOption = options.find((option) => option.id === optionId)
+        return {
+          ...meal,
+          options,
+          ...(meal.defaultOptionId === optionId && updatedOption ? { nutrition: updatedOption.nutrition } : {}),
+        }
+      }),
+    }))
+  }
+
+  const updateIngredient = (
+    mealId: string,
+    optionId: string | undefined,
+    ingredientId: string,
+    patch: Partial<Ingredient>,
+  ) => {
+    setState((current) => ({
+      ...current,
+      meals: current.meals.map((meal) => {
+        if (meal.id !== mealId) {
+          return meal
+        }
+        if (!optionId || !meal.options?.length) {
+          return {
+            ...meal,
+            ingredients: meal.ingredients.map((ingredient) =>
+              ingredient.id === ingredientId ? { ...ingredient, ...patch } : ingredient,
+            ),
+          }
+        }
+
+        const options = meal.options.map((option) =>
+          option.id === optionId
+            ? {
+                ...option,
+                ingredients: option.ingredients.map((ingredient) =>
+                  ingredient.id === ingredientId ? { ...ingredient, ...patch } : ingredient,
+                ),
+              }
+            : option,
+        )
+        const updatedOption = options.find((option) => option.id === optionId)
+        return {
+          ...meal,
+          options,
+          ...(meal.defaultOptionId === optionId && updatedOption ? { ingredients: updatedOption.ingredients } : {}),
+        }
+      }),
     }))
   }
 
@@ -372,29 +495,63 @@ function Workspace({ sync }: { sync: ReturnType<typeof useSyncedState<AppState>>
     }))
   }
 
-  const addIngredient = (mealId: string) => {
-    vibrate(8)
-    setState((current) => ({
-      ...current,
-      meals: current.meals.map((meal) =>
-        meal.id === mealId
-          ? {
-              ...meal,
-              ingredients: [...meal.ingredients, { id: createId('ingredient'), name: 'Ingrediente', amount: '' }],
-            }
-          : meal,
-      ),
-    }))
-  }
-
-  const deleteIngredient = (mealId: string, ingredientId: string) => {
+  const addIngredient = (mealId: string, optionId?: string) => {
     vibrate(8)
     setState((current) => {
-      const meals = current.meals.map((meal) =>
-        meal.id === mealId && meal.ingredients.length > 1
-          ? { ...meal, ingredients: meal.ingredients.filter((ingredient) => ingredient.id !== ingredientId) }
-          : meal,
-      )
+      const ingredient = { id: createId('ingredient'), name: 'Ingrediente', amount: '' }
+      return {
+        ...current,
+        meals: current.meals.map((meal) => {
+          if (meal.id !== mealId) {
+            return meal
+          }
+          if (!optionId || !meal.options?.length) {
+            return { ...meal, ingredients: [...meal.ingredients, ingredient] }
+          }
+
+          const options = meal.options.map((option) =>
+            option.id === optionId ? { ...option, ingredients: [...option.ingredients, ingredient] } : option,
+          )
+          const updatedOption = options.find((option) => option.id === optionId)
+          return {
+            ...meal,
+            options,
+            ...(meal.defaultOptionId === optionId && updatedOption ? { ingredients: updatedOption.ingredients } : {}),
+          }
+        }),
+      }
+    })
+  }
+
+  const deleteIngredient = (mealId: string, optionId: string | undefined, ingredientId: string) => {
+    vibrate(8)
+    setState((current) => {
+      const meals = current.meals.map((meal) => {
+        if (meal.id !== mealId) {
+          return meal
+        }
+        if (!optionId || !meal.options?.length) {
+          return meal.ingredients.length > 1
+            ? { ...meal, ingredients: meal.ingredients.filter((ingredient) => ingredient.id !== ingredientId) }
+            : meal
+        }
+
+        const targetOption = resolveMealOption(meal, optionId)
+        if (!targetOption || targetOption.ingredients.length <= 1) {
+          return meal
+        }
+        const options = meal.options.map((option) =>
+          option.id === optionId
+            ? { ...option, ingredients: option.ingredients.filter((ingredient) => ingredient.id !== ingredientId) }
+            : option,
+        )
+        const updatedOption = options.find((option) => option.id === optionId)
+        return {
+          ...meal,
+          options,
+          ...(meal.defaultOptionId === optionId && updatedOption ? { ingredients: updatedOption.ingredients } : {}),
+        }
+      })
       const nextMeal = meals.find((meal) => meal.id === mealId)
 
       return {
@@ -405,12 +562,10 @@ function Workspace({ sync }: { sync: ReturnType<typeof useSyncedState<AppState>>
             return item
           }
           const checkedIngredientIds = item.checkedIngredientIds.filter((id) => id !== ingredientId)
+          const nextSession = { ...item, checkedIngredientIds }
           return {
-            ...item,
-            checkedIngredientIds,
-            completed:
-              nextMeal.ingredients.length > 0 &&
-              nextMeal.ingredients.every((ingredient) => checkedIngredientIds.includes(ingredient.id)),
+            ...nextSession,
+            completed: isMealSessionComplete(nextSession, nextMeal),
           }
         }),
       }
@@ -422,9 +577,11 @@ function Workspace({ sync }: { sync: ReturnType<typeof useSyncedState<AppState>>
       <TodayView
         creatineCompleted={state.creatineDates.includes(today)}
         meals={state.meals}
+        planNotes={state.planNotes}
         sessions={state.sessions}
         target={state.target}
         today={today}
+        selectMealOption={selectMealOption}
         toggleCreatine={toggleCreatine}
         toggleIngredient={toggleIngredient}
         toggleMeal={toggleMeal}
@@ -437,9 +594,11 @@ function Workspace({ sync }: { sync: ReturnType<typeof useSyncedState<AppState>>
         deleteIngredient={deleteIngredient}
         deleteMeal={deleteMeal}
         meals={state.meals}
+        planNotes={state.planNotes}
         target={state.target}
         updateIngredient={updateIngredient}
         updateMeal={updateMeal}
+        updateMealOption={updateMealOption}
         updateMealNutrition={updateMealNutrition}
         updateTarget={updateTarget}
       />
@@ -685,7 +844,9 @@ function MetricCard({ icon, label, value }: { icon: ReactNode; label: string; va
 function TodayView({
   creatineCompleted,
   meals,
+  planNotes,
   sessions,
+  selectMealOption,
   target,
   today,
   toggleCreatine,
@@ -694,24 +855,45 @@ function TodayView({
 }: {
   creatineCompleted: boolean
   meals: Meal[]
+  planNotes?: string[]
   sessions: MealSession[]
+  selectMealOption: (mealId: string, optionId: string) => void
   target: Nutrition
   today: string
   toggleCreatine: () => void
-  toggleIngredient: (mealId: string, ingredientId: string) => void
-  toggleMeal: (mealId: string) => void
+  toggleIngredient: (mealId: string, optionId: string | undefined, ingredientId: string) => void
+  toggleMeal: (mealId: string, optionId?: string) => void
 }) {
   const sessionsByMealId = useMemo(
     () => getMealSessionsForDate(sessions, today),
     [sessions, today],
   )
+  const selectedOptionIdForMeal = (meal: Meal) => {
+    if (!meal.options?.length) {
+      return undefined
+    }
+
+    const sourceMealId = meal.optionSourceMealId ?? meal.id
+    return sessionsByMealId.get(sourceMealId)?.optionId
+  }
+  const sessionMatchesSelection = (meal: Meal, session: MealSession | undefined) => {
+    if (!meal.options?.length) {
+      return true
+    }
+
+    return Boolean(session?.optionId && session.optionId === selectedOptionIdForMeal(meal))
+  }
   const completedMeals = meals.filter((meal) => {
     const session = sessionsByMealId.get(meal.id)
-    return Boolean(session && isMealSessionComplete(session, meal))
+    return Boolean(session && sessionMatchesSelection(meal, session) && isMealSessionComplete(session, meal))
   }).length
   const completedCalories = meals.reduce((total, meal) => {
     const session = sessionsByMealId.get(meal.id)
-    return total + (session && isMealSessionComplete(session, meal) ? meal.nutrition.calories : 0)
+    if (!session || !sessionMatchesSelection(meal, session) || !isMealSessionComplete(session, meal)) {
+      return total
+    }
+
+    return total + (resolveMealNutrition(meal, session.optionId)?.calories ?? 0)
   }, 0)
   const completedTasks = completedMeals + (creatineCompleted ? 1 : 0)
   const totalTasks = meals.length + 1
@@ -734,6 +916,8 @@ function TodayView({
         </div>
       </section>
 
+      <PlanNotes notes={planNotes} />
+
       <button className={creatineCompleted ? 'creatine-card complete' : 'creatine-card'} type="button" onClick={toggleCreatine}>
         <span className="check-icon">{creatineCompleted ? <Check size={18} /> : <Circle size={18} />}</span>
         <span>
@@ -748,6 +932,8 @@ function TodayView({
           <MealChecklistCard
             key={meal.id}
             meal={meal}
+            selectMealOption={selectMealOption}
+            selectedOptionId={selectedOptionIdForMeal(meal)}
             session={sessionsByMealId.get(meal.id)}
             toggleIngredient={toggleIngredient}
             toggleMeal={toggleMeal}
@@ -770,26 +956,46 @@ function TodayView({
 
 function MealChecklistCard({
   meal,
+  selectMealOption,
+  selectedOptionId,
   session,
   toggleIngredient,
   toggleMeal,
 }: {
   meal: Meal
+  selectMealOption: (mealId: string, optionId: string) => void
+  selectedOptionId?: string
   session?: MealSession
-  toggleIngredient: (mealId: string, ingredientId: string) => void
-  toggleMeal: (mealId: string) => void
+  toggleIngredient: (mealId: string, optionId: string | undefined, ingredientId: string) => void
+  toggleMeal: (mealId: string, optionId?: string) => void
 }) {
-  const checkedIds = new Set(session?.checkedIngredientIds ?? [])
-  const complete = Boolean(session && isMealSessionComplete(session, meal))
+  const selectedOption = selectedOptionId ? resolveMealOption(meal, selectedOptionId) : undefined
+  const hasSelection = !meal.options?.length || Boolean(selectedOption)
+  const sessionMatchesSelection = !meal.options?.length || session?.optionId === selectedOption?.id
+  const checkedIds = new Set(sessionMatchesSelection ? (session?.checkedIngredientIds ?? []) : [])
+  const complete = Boolean(session && sessionMatchesSelection && isMealSessionComplete(session, meal))
+  const ingredients = meal.options?.length ? (selectedOption?.ingredients ?? []) : meal.ingredients
+  const nutrition = meal.options?.length ? selectedOption?.nutrition : meal.nutrition
+  const optionCalories = meal.options?.map((option) => option.nutrition.calories) ?? []
+  const calorieLabel = nutrition
+    ? `~${formatNumber(nutrition.calories)} kcal`
+    : optionCalories.length
+      ? `~${formatNumber(Math.min(...optionCalories))}-${formatNumber(Math.max(...optionCalories))} kcal`
+      : '~0 kcal'
 
   return (
     <article className={complete ? 'meal-checklist complete' : 'meal-checklist'}>
       <div className="meal-checklist-head">
         <button
-          aria-label={complete ? `Marcar ${meal.name} como pendiente` : `Completar ${meal.name}`}
+          aria-label={!hasSelection
+            ? `Elige una opción para ${meal.name}`
+            : complete
+              ? `Marcar ${meal.name} como pendiente`
+              : `Completar ${meal.name}`}
           className="meal-master-check"
+          disabled={!hasSelection}
           type="button"
-          onClick={() => toggleMeal(meal.id)}
+          onClick={() => toggleMeal(meal.id, selectedOption?.id)}
         >
           {complete ? <Check size={20} /> : <Circle size={20} />}
         </button>
@@ -797,14 +1003,51 @@ function MealChecklistCard({
           <h2>{meal.name}</h2>
         </div>
         <div className="meal-calories">
-          <strong>~{formatNumber(meal.nutrition.calories)} kcal</strong>
+          <strong>{calorieLabel}</strong>
         </div>
       </div>
 
-      <NutritionChips nutrition={meal.nutrition} />
+      {meal.options?.length && !meal.optionSourceMealId && (
+        <fieldset className="meal-option-picker">
+          <legend>Elige una opción para registrar</legend>
+          <div className="meal-option-grid">
+            {meal.options.map((option) => (
+              <label
+                className={option.id === selectedOption?.id ? 'meal-option-choice selected' : 'meal-option-choice'}
+                key={option.id}
+              >
+                <input
+                  checked={option.id === selectedOption?.id}
+                  name={`meal-option-${meal.id}`}
+                  type="radio"
+                  value={option.id}
+                  onChange={() => selectMealOption(meal.id, option.id)}
+                />
+                <span>
+                  <strong>{option.name}</strong>
+                  <small>
+                    ~{formatNumber(option.nutrition.calories)} kcal
+                    {option.nutrition.protein !== null && ` · P ${formatNumber(option.nutrition.protein)} g`}
+                  </small>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
 
-      <div className="ingredient-checklist">
-        {meal.ingredients.map((ingredient) => {
+      {meal.optionSourceMealId && (
+        <div className={selectedOption ? 'linked-option-status ready' : 'linked-option-status'} role="status">
+          {selectedOption
+            ? `Ajustado a ${selectedOption.name}`
+            : 'Elige primero una opción en la cena para fijar esta cantidad.'}
+        </div>
+      )}
+
+      {nutrition && <NutritionChips nutrition={nutrition} />}
+
+      {ingredients.length > 0 ? <div className="ingredient-checklist">
+        {ingredients.map((ingredient) => {
           const checked = checkedIds.has(ingredient.id)
           return (
             <button
@@ -812,7 +1055,7 @@ function MealChecklistCard({
               className={checked ? 'ingredient-check checked' : 'ingredient-check'}
               key={ingredient.id}
               type="button"
-              onClick={() => toggleIngredient(meal.id, ingredient.id)}
+              onClick={() => toggleIngredient(meal.id, selectedOption?.id, ingredient.id)}
             >
               <span className="check-icon">{checked ? <Check size={17} /> : <Circle size={17} />}</span>
               <span>
@@ -822,18 +1065,34 @@ function MealChecklistCard({
             </button>
           )
         })}
-      </div>
+      </div> : meal.options?.length && (
+        <div className="meal-option-empty">Selecciona una opción para ver y registrar sus ingredientes.</div>
+      )}
     </article>
   )
 }
 
 function NutritionChips({ nutrition }: { nutrition: Nutrition }) {
+  const macros = [
+    { label: 'P', value: nutrition.protein },
+    { label: 'C', value: nutrition.carbs },
+    { label: 'G', value: nutrition.fat },
+  ].filter((macro) => macro.value !== null)
+  if (!macros.length) return null
+
   return (
     <div className="nutrition-chips" aria-label="Macronutrientes">
-      <span><strong>P</strong> {formatNumber(nutrition.protein)} g</span>
-      <span><strong>C</strong> {formatNumber(nutrition.carbs)} g</span>
-      <span><strong>G</strong> {formatNumber(nutrition.fat)} g</span>
+      {macros.map((macro) => <span key={macro.label}><strong>{macro.label}</strong> {formatNumber(macro.value!)} g</span>)}
     </div>
+  )
+}
+
+function PlanNotes({ notes }: { notes?: string[] }) {
+  if (!notes?.length) return null
+  return (
+    <aside className="plan-guidance" aria-label="Indicaciones del plan">
+      {notes.map((note, index) => <p key={index}>{note}</p>)}
+    </aside>
   )
 }
 
@@ -866,9 +1125,12 @@ function NutritionFields({
                 inputMode="decimal"
                 min="0"
                 type="number"
-                value={nutrition[field.key]}
+                placeholder="Sin dato"
+                value={nutrition[field.key] ?? ''}
                 onFocus={(event) => event.currentTarget.select()}
-                onChange={(event) => update({ [field.key]: Math.max(0, Number(event.target.value)) })}
+                onChange={(event) => update({ [field.key]: event.target.value === '' && field.key !== 'calories'
+                  ? null
+                  : Math.max(0, Number(event.target.value)) })}
               />
               <small>{field.unit}</small>
             </span>
@@ -886,25 +1148,35 @@ function PlanView({
   deleteIngredient,
   deleteMeal,
   meals,
+  planNotes,
   target,
   updateIngredient,
   updateMeal,
+  updateMealOption,
   updateMealNutrition,
   updateTarget,
 }: {
-  addIngredient: (mealId: string) => void
+  addIngredient: (mealId: string, optionId?: string) => void
   addMeal: () => string
   dailyNutrition: Nutrition
-  deleteIngredient: (mealId: string, ingredientId: string) => void
+  deleteIngredient: (mealId: string, optionId: string | undefined, ingredientId: string) => void
   deleteMeal: (mealId: string) => void
   meals: Meal[]
+  planNotes?: string[]
   target: Nutrition
-  updateIngredient: (mealId: string, ingredientId: string, patch: Partial<Ingredient>) => void
+  updateIngredient: (
+    mealId: string,
+    optionId: string | undefined,
+    ingredientId: string,
+    patch: Partial<Ingredient>,
+  ) => void
   updateMeal: (mealId: string, patch: Partial<Meal>) => void
-  updateMealNutrition: (mealId: string, patch: Partial<Nutrition>) => void
+  updateMealOption: (mealId: string, optionId: string, patch: Partial<MealOption>) => void
+  updateMealNutrition: (mealId: string, optionId: string | undefined, patch: Partial<Nutrition>) => void
   updateTarget: (patch: Partial<Nutrition>) => void
 }) {
   const [expandedMealId, setExpandedMealId] = useState('')
+  const [selectedOptionId, setSelectedOptionId] = useState('')
 
   return (
     <section className="plan-view enter">
@@ -917,7 +1189,10 @@ function PlanView({
           aria-label="Agregar comida"
           className="icon-button brand-button"
           type="button"
-          onClick={() => setExpandedMealId(addMeal())}
+          onClick={() => {
+            setSelectedOptionId('')
+            setExpandedMealId(addMeal())
+          }}
         >
           <Plus size={19} />
         </button>
@@ -937,6 +1212,8 @@ function PlanView({
         <NutritionFields legend="Objetivo diario" nutrition={target} update={updateTarget} />
       </section>
 
+      <PlanNotes notes={planNotes} />
+
       <div className="section-heading">
         <span>Comidas</span>
         <strong>{meals.length}</strong>
@@ -945,6 +1222,28 @@ function PlanView({
       <div className="plan-list">
         {meals.map((meal) => {
           const expanded = expandedMealId === meal.id
+          const selectedOption = meal.options?.find((option) => option.id === selectedOptionId)
+            ?? resolveMealOption(meal)
+          const optionId = meal.options?.length ? selectedOption?.id : undefined
+          const ingredients = selectedOption?.ingredients ?? meal.ingredients
+          const nutrition = selectedOption?.nutrition ?? meal.nutrition
+          const optionCalories = meal.options?.map((option) => option.nutrition.calories) ?? []
+          const calorieSummary = optionCalories.length
+            ? Math.min(...optionCalories) === Math.max(...optionCalories)
+              ? `~${formatNumber(optionCalories[0])} kcal`
+              : `~${formatNumber(Math.min(...optionCalories))}-${formatNumber(Math.max(...optionCalories))} kcal`
+            : `~${formatNumber(meal.nutrition.calories)} kcal`
+          const toggleExpanded = () => {
+            if (expanded) {
+              setExpandedMealId('')
+              setSelectedOptionId('')
+              return
+            }
+
+            setExpandedMealId(meal.id)
+            setSelectedOptionId(meal.defaultOptionId ?? meal.options?.[0]?.id ?? '')
+          }
+
           return (
             <article className={expanded ? 'surface plan-card expanded' : 'surface plan-card'} key={meal.id}>
               <div className="plan-card-head">
@@ -952,22 +1251,22 @@ function PlanView({
                   aria-expanded={expanded}
                   className="plan-card-summary"
                   type="button"
-                  onClick={() => setExpandedMealId(expanded ? '' : meal.id)}
+                  onClick={toggleExpanded}
                 >
                   <strong>{meal.name}</strong>
-                  <small>~{formatNumber(meal.nutrition.calories)} kcal</small>
+                  <small>{calorieSummary}{meal.options?.length ? ` · ${meal.options.length} opciones` : ''}</small>
                 </button>
                 <button
                   aria-label={expanded ? `Cerrar edición de ${meal.name}` : `Editar ${meal.name}`}
                   className="icon-button flat"
                   type="button"
-                  onClick={() => setExpandedMealId(expanded ? '' : meal.id)}
+                  onClick={toggleExpanded}
                 >
                   {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                 </button>
               </div>
 
-              {!expanded && <NutritionChips nutrition={meal.nutrition} />}
+              {!expanded && <NutritionChips nutrition={nutrition} />}
 
               {expanded && (
                 <div className="plan-card-editor">
@@ -978,36 +1277,61 @@ function PlanView({
                     </label>
                   </div>
 
+                  {meal.options?.length && selectedOption && (
+                    <div className="meal-option-editor-fields">
+                      <label>
+                        <span>{meal.optionSourceMealId ? 'Ruta vinculada a la cena' : 'Opción'}</span>
+                        <select
+                          aria-label={`Opción de ${meal.name}`}
+                          value={selectedOption.id}
+                          onChange={(event) => setSelectedOptionId(event.target.value)}
+                        >
+                          {meal.options.map((option) => (
+                            <option key={option.id} value={option.id}>{option.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Nombre de la opción</span>
+                        <input
+                          aria-label={`Nombre de opción de ${meal.name}`}
+                          value={selectedOption.name}
+                          onChange={(event) => updateMealOption(meal.id, selectedOption.id, { name: event.target.value })}
+                        />
+                      </label>
+                    </div>
+                  )}
+
                   <NutritionFields
                     legend="Nutrición aproximada"
-                    nutrition={meal.nutrition}
-                    update={(patch) => updateMealNutrition(meal.id, patch)}
+                    nutrition={nutrition}
+                    update={(patch) => updateMealNutrition(meal.id, optionId, patch)}
                   />
 
                   <div className="editor-label">
                     <span>Ingredientes</span>
-                    <strong>{meal.ingredients.length}</strong>
+                    <strong>{ingredients.length}</strong>
                   </div>
 
                   <div className="ingredient-editor-list">
-                    {meal.ingredients.map((ingredient) => (
+                    {ingredients.map((ingredient) => (
                       <div className="ingredient-editor" key={ingredient.id}>
                         <input
                           aria-label={`Ingrediente de ${meal.name}`}
                           value={ingredient.name}
-                          onChange={(event) => updateIngredient(meal.id, ingredient.id, { name: event.target.value })}
+                          onChange={(event) => updateIngredient(meal.id, optionId, ingredient.id, { name: event.target.value })}
                         />
                         <input
                           aria-label={`Cantidad de ${ingredient.name}`}
                           value={ingredient.amount}
-                          onChange={(event) => updateIngredient(meal.id, ingredient.id, { amount: event.target.value })}
+                          onChange={(event) => updateIngredient(meal.id, optionId, ingredient.id, { amount: event.target.value })}
                         />
                         <button
                           aria-label={`Eliminar ${ingredient.name}`}
                           className="icon-button tiny"
-                          disabled={meal.ingredients.length === 1}
+                          disabled={ingredients.length === 1}
                           type="button"
-                          onClick={() => deleteIngredient(meal.id, ingredient.id)}
+                          onClick={() => deleteIngredient(meal.id, optionId, ingredient.id)}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -1016,7 +1340,7 @@ function PlanView({
                   </div>
 
                   <div className="plan-card-footer">
-                    <button className="secondary-button" type="button" onClick={() => addIngredient(meal.id)}>
+                    <button className="secondary-button" type="button" onClick={() => addIngredient(meal.id, optionId)}>
                       <Plus size={16} />
                       Ingrediente
                     </button>
@@ -1028,11 +1352,19 @@ function PlanView({
                         onClick={() => {
                           deleteMeal(meal.id)
                           setExpandedMealId('')
+                          setSelectedOptionId('')
                         }}
                       >
                         <Trash2 size={17} />
                       </button>
-                      <button className="primary-button compact" type="button" onClick={() => setExpandedMealId('')}>
+                      <button
+                        className="primary-button compact"
+                        type="button"
+                        onClick={() => {
+                          setExpandedMealId('')
+                          setSelectedOptionId('')
+                        }}
+                      >
                         Listo
                       </button>
                     </div>

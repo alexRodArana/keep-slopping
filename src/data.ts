@@ -1,70 +1,142 @@
-import type { AppState, Meal, PlanTarget } from './types'
+import type { AppState, Meal, Nutrition, PlanTarget } from './types'
 
-export const CURRENT_PLAN_VERSION = 9
+export const CURRENT_PLAN_VERSION = 11
 
+// The PDF gives daily reference macros, but no individual-meal macro breakdown.
 export const defaultTarget: PlanTarget = {
-  calories: 2650,
-  protein: 161,
-  carbs: 365,
-  fat: 59.5,
+  calories: 2822,
+  protein: 148,
+  carbs: 431,
+  fat: 60,
 }
 
-// These are the per-meal values printed in the PDF. Their carbohydrate sum is
-// 364.6 g, which the document rounds to ~365 g in its daily headline.
+export const defaultPlanNotes = [
+  'Pesa los sólidos en crudo o seco. No se incluye aceite ni extras.',
+  'Elige fresas o moras azules en cada porción de fruta; no consumas ambas juntas.',
+  'Las calorías son estimadas y los macros diarios son de referencia. Con moras azules, los macros pueden variar ligeramente.',
+]
+
+const estimatedNutrition = (calories: number): Nutrition => ({
+  calories,
+  protein: null,
+  carbs: null,
+  fat: null,
+})
+
+// Preserve the PDF's per-meal estimates. These sum to 2,814 kcal with dinner A
+// and 2,818 kcal with dinner B; its daily footer instead reports 2,820/2,819.
 export const defaultMeals: Meal[] = [
   {
     id: 'breakfast',
-    name: '1. Desayuno - cereal con fresas',
+    name: '1. Desayuno | Avena',
     ingredients: [
-      { id: 'breakfast-axa-4-korn', name: 'AXA 4 Korn', amount: '65 g' },
-      { id: 'breakfast-milk', name: 'Leche 0.5%', amount: '250 ml' },
-      { id: 'breakfast-whey', name: 'Whey', amount: '20 g' },
-      { id: 'breakfast-frozen-strawberries', name: 'Fresas congeladas', amount: '200 g' },
-      { id: 'breakfast-peanut-butter', name: 'Crema de cacahuate', amount: '30 g' },
-      { id: 'breakfast-cinnamon-sweetener', name: 'Canela y edulcorante', amount: 'Al gusto' },
+      { id: 'breakfast-oats', name: 'Avena seca', amount: '107 g' },
+      { id: 'breakfast-milk', name: 'Leche 0.5%', amount: '300 ml' },
+      { id: 'breakfast-whey', name: 'Proteína whey', amount: '29 g' },
+      {
+        id: 'breakfast-fruit',
+        name: 'Fresas congeladas o moras azules',
+        amount: '200 g de fresas o 112 g de moras azules',
+      },
+      {
+        id: 'breakfast-traditional-peanut-butter',
+        name: 'Crema de cacahuate tradicional',
+        amount: '25 g',
+      },
     ],
-    nutrition: { calories: 642, protein: 42.1, carbs: 69.2, fat: 20.5 },
+    nutrition: estimatedNutrition(865),
   },
   {
     id: 'lunch',
-    name: '2. Colación pre-entreno',
+    name: 'Colación preentreno | Arroz inflado y miel',
     ingredients: [
-      { id: 'lunch-rice-cakes', name: 'Rice cakes', amount: '50 g' },
-      { id: 'lunch-honey', name: 'Miel', amount: '24 g' },
+      { id: 'lunch-puffed-rice', name: 'Arroz inflado natural (seco)', amount: '53 g' },
+      { id: 'lunch-honey', name: 'Miel', amount: '25 g' },
     ],
-    nutrition: { calories: 274, protein: 3.8, carbs: 59, fat: 1.6 },
+    nutrition: estimatedNutrition(276),
   },
   {
-    id: 'post-gym',
-    name: '3. Comida post-entreno',
+    id: 'post-gym-first',
+    name: '2. Postentreno, primera parte',
     ingredients: [
-      { id: 'post-gym-raw-potato', name: 'Papa, peso crudo', amount: '610 g' },
-      {
-        id: 'post-gym-raw-chicken-thigh',
-        name: 'Kylling lårfilet (muslo de pollo sin piel), crudo',
-        amount: '175 g',
-      },
-      { id: 'post-gym-vegetables', name: 'Verduras', amount: '200 g' },
-      { id: 'post-gym-pumpkin-seeds', name: 'Semillas de calabaza', amount: '16 g' },
+      { id: 'post-gym-first-chicken-breast', name: 'Pechuga de pollo, en crudo', amount: '48 g' },
+      { id: 'post-gym-first-potato', name: 'Papa, en crudo', amount: '450 g' },
+      { id: 'post-gym-first-frozen-vegetables', name: 'Verduras congeladas', amount: '125 g' },
+      { id: 'post-gym-first-pumpkin-seeds', name: 'Semillas de calabaza', amount: '12 g' },
     ],
-    nutrition: { calories: 862, protein: 53.5, carbs: 118.2, fat: 20 },
+    nutrition: estimatedNutrition(510),
+  },
+  {
+    id: 'post-gym-second',
+    name: '3. Postentreno, segunda parte',
+    ingredients: [
+      { id: 'post-gym-second-chicken-breast', name: 'Pechuga de pollo, en crudo', amount: '47 g' },
+      { id: 'post-gym-second-potato', name: 'Papa, en crudo', amount: '450 g' },
+      { id: 'post-gym-second-frozen-vegetables', name: 'Verduras congeladas', amount: '125 g' },
+      { id: 'post-gym-second-pumpkin-seeds', name: 'Semillas de calabaza', amount: '13 g' },
+    ],
+    nutrition: estimatedNutrition(515),
   },
   {
     id: 'dinner',
-    name: '4. Cena',
+    name: '4. Cena | Elige UNA opción',
     ingredients: [
-      { id: 'dinner-raw-potato', name: 'Papa, peso crudo', amount: '610 g' },
-      { id: 'dinner-raw-ground-beef', name: 'Carne molida 5%, cruda', amount: '180 g' },
-      { id: 'dinner-vegetables', name: 'Verduras', amount: '200 g' },
-      { id: 'dinner-pumpkin-seeds', name: 'Semillas de calabaza', amount: '16 g' },
+      { id: 'dinner-a-oats', name: 'Avena seca', amount: '97 g' },
+      { id: 'dinner-a-milk', name: 'Leche 0.5%', amount: '150 ml' },
+      { id: 'dinner-a-whey', name: 'Proteína whey', amount: '6 g' },
+      {
+        id: 'dinner-a-fruit',
+        name: 'Fresas congeladas o moras azules',
+        amount: '150 g de fresas o 84 g de moras azules',
+      },
+      {
+        id: 'dinner-a-traditional-peanut-butter',
+        name: 'Crema de cacahuate tradicional',
+        amount: '24 g',
+      },
     ],
-    nutrition: { calories: 872, protein: 61.6, carbs: 118.2, fat: 17.4 },
+    nutrition: estimatedNutrition(648),
+    defaultOptionId: 'dinner-a',
+    options: [
+      {
+        id: 'dinner-a',
+        name: 'Opción A - Avena sin PB2',
+        ingredients: [
+          { id: 'dinner-a-oats', name: 'Avena seca', amount: '97 g' },
+          { id: 'dinner-a-milk', name: 'Leche 0.5%', amount: '150 ml' },
+          { id: 'dinner-a-whey', name: 'Proteína whey', amount: '6 g' },
+          {
+            id: 'dinner-a-fruit',
+            name: 'Fresas congeladas o moras azules',
+            amount: '150 g de fresas o 84 g de moras azules',
+          },
+          {
+            id: 'dinner-a-traditional-peanut-butter',
+            name: 'Crema de cacahuate tradicional',
+            amount: '24 g',
+          },
+        ],
+        nutrition: estimatedNutrition(648),
+      },
+      {
+        id: 'dinner-b',
+        name: 'Opción B - Pollo con papa',
+        ingredients: [
+          { id: 'dinner-b-chicken-breast', name: 'Pechuga de pollo, en crudo', amount: '42 g' },
+          { id: 'dinner-b-potato', name: 'Papa, en crudo', amount: '420 g' },
+          { id: 'dinner-b-frozen-vegetables', name: 'Verduras congeladas', amount: '200 g' },
+          { id: 'dinner-b-pumpkin-seeds', name: 'Semillas de calabaza', amount: '38 g' },
+        ],
+        nutrition: estimatedNutrition(652),
+      },
+    ],
   },
 ]
 
 export const initialState: AppState = {
   planVersion: CURRENT_PLAN_VERSION,
   target: defaultTarget,
+  planNotes: defaultPlanNotes,
   creatineDates: [],
   meals: defaultMeals,
   sessions: [],
